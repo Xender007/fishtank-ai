@@ -1,0 +1,17 @@
+# Third-party skill bundle, installed from
+#   https://github.com/nextlevelbuilder/ui-ux-pro-max-skill
+# 9.4MB of somebody else's reference data. Vendoring it here would republish
+# their content and quadruple this repo for no benefit - it is one command to
+# reinstall (see README).
+.claude/skills/
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+
+# Node, if anything is ever added
+node_modules/
+npm-debug.log*

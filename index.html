@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Fish, Shark, and a Brain</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <h1>Coordinated escape &mdash; scouts, schools, and shared alarms</h1>
+  <div id="training-note" class="legend">Loading the saved champion...</div>
+
+  <div id="hud">
+    <span>gen <b id="gen">1</b></span>
+    <span>alive <b id="alive">0</b>/<b id="total">0</b></span>
+    <span>time <b id="time">0.0</b>s</span>
+    <span>mean <b id="mean">&ndash;</b></span>
+    <span>best <b id="best">&ndash;</b></span>
+    <span>params <b id="params">0</b></span>
+    <span>hidden <b id="hidden">0</b></span>
+    <span>species <b id="species">1</b></span>
+    <span>evolving <b id="evolving" class="off">OFF</b></span>
+    <span>spread <b id="diversity">&ndash;</b></span>
+    <span>shoal <b id="shoal">&ndash;</b></span>
+    <span>packs <b id="packs">0</b></span>
+    <span>young <b id="young">0</b></span>
+    <span>births <b id="births">0</b></span>
+    <span>speed <b id="speed">1&times;</b></span>
+    <span id="paused">PAUSED</span>
+  </div>
+  <div class="hudrow sub">
+    <span class="hint">
+      <b>click a fish</b> to pin it &middot; <b>click a neuron</b> for its working &middot;
+      <b>n</b> = step the forward pass &middot; <b>1 2 3 4</b> = speed &middot;
+      g = breed now &middot; space = pause &middot; s = step time &middot;
+      v = rays &middot; l = lineage &middot; <b>e</b> = evolution on/off &middot; b = brain (<b id="mode">&mdash;</b>) &middot; r = restart
+    </span>
+  </div>
+
+  <div id="stage">
+    <div id="left">
+      <canvas id="sea"></canvas>
+      <canvas id="chart"></canvas>
+    </div>
+
+    <aside id="panel">
+      <h2>inputs <span id="focus-note">move the mouse over the tank</span></h2>
+
+      <!-- Live status for the focused fish. Each line hides itself when it has
+           nothing to say (see .note:empty in the stylesheet) - otherwise an
+           empty element still draws its card border and the panel fills up
+           with blank boxes. -->
+      <div id="fishstatus">
+        <div id="social-note" class="note"></div>
+        <div id="perception-note" class="note"></div>
+        <div id="plan-note" class="note"></div>
+      </div>
+
+      <div id="senses"></div>
+
+      <details class="legend-details">
+        <summary>what the overlays mean</summary>
+        <p class="legend">
+          Gold &alpha; = pack scout &middot; matching rings = pack mates &middot;
+          orange rings = threat warning.<br>
+          Shaded fan = scanning vision &middot; inner circle = close-range sensing.<br>
+          Solid red contact = a sighting &middot; dashed red = a remembered warning.<br>
+          Dotted gold line = the focused fish's planned dodge and exit.
+        </p>
+      </details>
+
+      <h2 class="spaced">the brain</h2>
+      <p class="legend">The graph shows the learned reflex. Schooling, shared memory, and escape-route prediction also guide the final movement.</p>
+      <div id="brainmeta">&mdash;</div>
+      <div id="brainwrap"><canvas id="brain"></canvas></div>
+      <p class="legend">
+        <span class="sw dot-pos"></span> firing positive &nbsp;
+        <span class="sw dot-neg"></span> negative<br>
+        <span class="sw line-pos"></span> positive weight &nbsp;
+        <span class="sw line-neg"></span> negative &mdash; thickness = strength<br>
+        dashed = a gene switched off but still inherited
+      </p>
+
+      <h2 class="spaced">how <i id="m-title">turn</i> was computed</h2>
+      <div id="math"></div>
+      <div class="mtotals">
+        <div class="mrow"><span class="mlabel">bias</span><span class="mtot" id="m-bias">+0.00</span></div>
+        <div class="mrow strong"><span class="mlabel">sum</span><span class="mtot" id="m-sum">+0.00</span></div>
+        <div class="mrow strong out"><span class="mlabel">tanh &rarr;</span><span class="mtot" id="m-out">+0.00</span></div>
+      </div>
+
+      <h2 class="spaced">structural mutations</h2>
+      <div id="mutlog"></div>
+
+      <h2 class="spaced">improve the brain</h2>
+      <div id="evolvebar">
+        <button id="btn-evolve" class="toggle">auto-improve: OFF</button>
+        <button id="btn-warm" class="toggle on">generation 1: champion</button>
+        <button id="btn-life" class="toggle">TIMER: generations reset on a clock</button>
+        <button id="btn-restart">restart from generation 1</button>
+      </div>
+      <div id="evolve-note" class="note"></div>
+
+      <h2 class="spaced">keep a brain</h2>
+      <div id="savebar">
+        <button id="btn-save">save best</button>
+        <button id="btn-load">load file</button>
+        <button id="btn-restore">restore last</button>
+        <button id="btn-champion">load champion</button>
+        <button id="btn-random">start random</button>
+        <button id="btn-champion">load champion</button>
+        <button id="btn-random">start random</button>
+        <input type="file" id="file-load" accept="application/json" hidden>
+      </div>
+      <div id="savenote"></div>
+      <p class="legend dim">
+        Kin senses are built but ship <b>off</b> &mdash; measured, they cost
+        fitness and produced no schooling. Flip
+        <b>senses.neighbours</b> in js/config.js to explore them.<br><br>
+        The champion of each generation is stored in this browser automatically,
+        so a refresh no longer throws the run away. <b>Save best</b> writes a
+        JSON file &mdash; open it in a text editor: a list of numbers and a list
+        of which node feeds which. That is the whole learned behaviour.
+      </p>
+    </aside>
+  </div>
+
+  <!--
+       LOAD ORDER MATTERS. Plain scripts, not ES modules, because browsers
+       block import/export on file:// URLs. Each file defines a global and may
+       only use globals defined ABOVE it. genome.js comes after brain.js
+       because it borrows blendHue() from it.
+  -->
+  <script src="js/config.js"></script>
+  <script src="js/rng.js"></script>
+  <script src="js/vec.js"></script>
+  <script src="js/senses.js"></script>
+  <script src="js/brain.js"></script>
+  <script src="js/genome.js"></script>
+  <script src="js/evolution.js"></script>
+  <script src="js/fish.js"></script>
+  <script src="js/schooling.js"></script>
+  <script src="js/shark.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/persist.js"></script>
+  <script src="js/brainview.js"></script>
+  <script src="js/chart.js"></script>
+  <!-- Written by train.js. A file:// page cannot fetch() a local JSON file
+       (CORS forbids it), but it can load a script - so the trainer writes the
+       champion as an assignment to window.CHAMPION. Missing file = no global,
+       and the page simply starts from random brains. -->
+  <script src="champions/best.js"></script>
+  <script src="js/main.js"></script>
+
+</body>
+</html>

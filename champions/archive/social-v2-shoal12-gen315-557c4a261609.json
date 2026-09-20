@@ -1,0 +1,308 @@
+{
+  "version": 1,
+  "saved": "2026-09-20T22:45:20.665Z",
+  "meta": {
+    "generation": 5,
+    "totalGenerations": 315,
+    "benchmark": 35.68923611111027,
+    "params": 26,
+    "hidden": 0,
+    "senses": 12,
+    "clones": 12,
+    "sharks": 2,
+    "seconds": 45,
+    "evaluation": "{\"regime\":\"social-v2\",\"clones\":12,\"seconds\":45,\"dt\":0.016666666666666666,\"fish\":{\"speed\":90,\"turn\":3,\"radius\":5},\"shark\":{\"count\":2,\"radius\":16,\"maxSpeed\":105,\"turnRate\":1.6,\"circleLimit\":3,\"circleBreakSeconds\":1.4},\"tank\":{\"w\":900,\"h\":600},\"senses\":{\"rayCount\":9,\"fov\":5.759586531581287,\"range\":170,\"wallRange\":130,\"neighbours\":false,\"neighbourRange\":150,\"crowdScale\":3},\"schooling\":{\"enabled\":true,\"minSize\":7,\"targetSize\":9,\"spacing\":24,\"alarmRange\":150,\"memorySeconds\":2.5,\"scoutRange\":260,\"followerRange\":170,\"nearSense\":65,\"planEvery\":6,\"predictionSteps\":10,\"predictionDt\":0.12,\"routeSteps\":16,\"dodgeSteps\":4}}"
+  },
+  "kind": "genome",
+  "hue": 286.6100381553406,
+  "nodes": [
+    {
+      "id": 0,
+      "type": 0,
+      "bias": 0
+    },
+    {
+      "id": 1,
+      "type": 0,
+      "bias": 0
+    },
+    {
+      "id": 2,
+      "type": 0,
+      "bias": 0
+    },
+    {
+      "id": 3,
+      "type": 0,
+      "bias": 0
+    },
+    {
+      "id": 4,
+      "type": 0,
+      "bias": 0
+    },
+    {
+      "id": 5,
+      "type": 0,
+      "bias": 0
+    },
+    {
+      "id": 6,
+      "type": 0,
+      "bias": 0
+    },
+    {
+      "id": 7,
+      "type": 0,
+      "bias": 0
+    },
+    {
+      "id": 8,
+      "type": 0,
+      "bias": 0
+    },
+    {
+      "id": 9,
+      "type": 0,
+      "bias": 0
+    },
+    {
+      "id": 10,
+      "type": 0,
+      "bias": 0
+    },
+    {
+      "id": 11,
+      "type": 0,
+      "bias": 0
+    },
+    {
+      "id": 12,
+      "type": 1,
+      "bias": -0.03601657084483631
+    },
+    {
+      "id": 13,
+      "type": 1,
+      "bias": -0.11512426822446287
+    }
+  ],
+  "conns": [
+    {
+      "inn": 0,
+      "from": 0,
+      "to": 12,
+      "recurrent": false,
+      "plasticity": 0,
+      "w": 0.2855787236581948,
+      "enabled": true
+    },
+    {
+      "inn": 1,
+      "from": 0,
+      "to": 13,
+      "recurrent": false,
+      "plasticity": 0,
+      "w": 0.14380023399707498,
+      "enabled": true
+    },
+    {
+      "inn": 2,
+      "from": 1,
+      "to": 12,
+      "recurrent": false,
+      "plasticity": 0,
+      "w": -0.04510742106204094,
+      "enabled": true
+    },
+    {
+      "inn": 3,
+      "from": 1,
+      "to": 13,
+      "recurrent": false,
+      "plasticity": 0,
+      "w": -0.16175949112519172,
+      "enabled": true
+    },
+    {
+      "inn": 4,
+      "from": 2,
+      "to": 12,
+      "recurrent": false,
+      "plasticity": 0,
+      "w": -0.20830474455627507,
+      "enabled": true
+    },
+    {
+      "inn": 5,
+      "from": 2,
+      "to": 13,
+      "recurrent": false,
+      "plasticity": 0,
+      "w": 0.044927633222503816,
+      "enabled": true
+    },
+    {
+      "inn": 6,
+      "from": 3,
+      "to": 12,
+      "recurrent": false,
+      "plasticity": 0,
+      "w": -0.14890059895714813,
+      "enabled": true
+    },
+    {
+      "inn": 7,
+      "from": 3,
+      "to": 13,
+      "recurrent": false,
+      "plasticity": 0,
+      "w": -0.11197742533390134,
+      "enabled": true
+    },
+    {
+      "inn": 8,
+      "from": 4,
+      "to": 12,
+      "recurrent": false,
+      "plasticity": 0,
+      "w": -0.02922371698403492,
+      "enabled": true
+    },
+    {
+      "inn": 9,
+      "from": 4,
+      "to": 13,
+      "recurrent": false,
+      "plasticity": 0,
+      "w": -0.37717548533975287,
+      "enabled": true
+    },
+    {
+      "inn": 10,
+      "from": 5,
+      "to": 12,
+      "recurrent": false,
+      "plasticity": 0,
+      "w": -0.014063632948960292,
+      "enabled": true
+    },
+    {
+      "inn": 11,
+      "from": 5,
+      "to": 13,
+      "recurrent": false,
+      "plasticity": 0,
+      "w": -0.494647937549743,
+      "enabled": true
+    },
+    {
+      "inn": 12,
+      "from": 6,
+      "to": 12,
+      "recurrent": false,
+      "plasticity": 0.016843730037230015,
+      "w": 0.0286351886574982,
+      "enabled": true
+    },
+    {
+      "inn": 13,
+      "from": 6,
+      "to": 13,
+      "recurrent": false,
+      "plasticity": -0.20271187469906723,
+      "w": -0.034709871810214565,
+      "enabled": true
+    },
+    {
+      "inn": 14,
+      "from": 7,
+      "to": 12,
+      "recurrent": false,
+      "plasticity": 0,
+      "w": 0.1916259866748563,
+      "enabled": true
+    },
+    {
+      "inn": 15,
+      "from": 7,
+      "to": 13,
+      "recurrent": false,
+      "plasticity": 0,
+      "w": 0.056429215793250886,
+      "enabled": true
+    },
+    {
+      "inn": 16,
+      "from": 8,
+      "to": 12,
+      "recurrent": false,
+      "plasticity": -0.15203751726136336,
+      "w": -0.1867132401626241,
+      "enabled": true
+    },
+    {
+      "inn": 17,
+      "from": 8,
+      "to": 13,
+      "recurrent": false,
+      "plasticity": 0,
+      "w": -0.161813810996349,
+      "enabled": true
+    },
+    {
+      "inn": 18,
+      "from": 9,
+      "to": 12,
+      "recurrent": false,
+      "plasticity": -0.3257481260328134,
+      "w": -0.09384179166003742,
+      "enabled": true
+    },
+    {
+      "inn": 19,
+      "from": 9,
+      "to": 13,
+      "recurrent": false,
+      "plasticity": 0,
+      "w": 0.21206630685293876,
+      "enabled": true
+    },
+    {
+      "inn": 20,
+      "from": 10,
+      "to": 12,
+      "recurrent": false,
+      "plasticity": 0,
+      "w": 0.7680122988595713,
+      "enabled": true
+    },
+    {
+      "inn": 21,
+      "from": 10,
+      "to": 13,
+      "recurrent": false,
+      "plasticity": 0.1885059713784999,
+      "w": -0.09769417838538311,
+      "enabled": true
+    },
+    {
+      "inn": 22,
+      "from": 11,
+      "to": 12,
+      "recurrent": false,
+      "plasticity": 0,
+      "w": -0.248266681376819,
+      "enabled": true
+    },
+    {
+      "inn": 23,
+      "from": 11,
+      "to": 13,
+      "recurrent": false,
+      "plasticity": 0,
+      "w": 0.061975113452030384,
+      "enabled": true
+    }
+  ]
+}

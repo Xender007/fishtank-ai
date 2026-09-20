@@ -1,0 +1,20 @@
+{
+  "runId": "2026-09-20T22:41:29.537Z-7724",
+  "started": "2026-09-20T22:41:29.538Z",
+  "finished": "2026-09-20T23:39:02.854Z",
+  "status": "complete",
+  "generations": 70,
+  "requestedGenerations": 70,
+  "totalGenerations": 380,
+  "population": 30,
+  "trials": 3,
+  "clones": 12,
+  "seconds": 45,
+  "seed": 3237694400,
+  "evaluation": "{\"regime\":\"social-v2\",\"clones\":12,\"seconds\":45,\"dt\":0.016666666666666666,\"fish\":{\"speed\":90,\"turn\":3,\"radius\":5},\"shark\":{\"count\":2,\"radius\":16,\"maxSpeed\":105,\"turnRate\":1.6,\"circleLimit\":3,\"circleBreakSeconds\":1.4},\"tank\":{\"w\":900,\"h\":600},\"senses\":{\"rayCount\":9,\"fov\":5.759586531581287,\"range\":170,\"wallRange\":130,\"neighbours\":false,\"neighbourRange\":150,\"crowdScale\":3},\"schooling\":{\"enabled\":true,\"minSize\":7,\"targetSize\":9,\"spacing\":24,\"alarmRange\":150,\"memorySeconds\":2.5,\"scoutRange\":260,\"followerRange\":170,\"nearSense\":65,\"planEvery\":6,\"predictionSteps\":10,\"predictionDt\":0.12,\"routeSteps\":16,\"dodgeSteps\":4}}",
+  "benchmark": 39.76298611111007,
+  "displayBenchmark": 54.20379629629448,
+  "params": 28,
+  "hidden": 1,
+  "minutes": 57.55526666666667
+}

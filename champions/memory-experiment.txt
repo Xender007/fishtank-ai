@@ -1,0 +1,11 @@
+=== CONTROL: no memory (recurrentRate 0) ===
+  best held-out survival: 37.3s of 45s  (20 params, 1 hidden)
+  improvements save to D:\neural network learning with fish and shark\champions\best-social-v2-shoal8.json and champions/best.js
+  run again to continue from here, or --fresh to start over
+
+
+=== WITH MEMORY (recurrentRate 0.4) ===
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:135:12)
+    at node:internal/main/run_main_module:28:49
+
+Node.js v20.11.0
