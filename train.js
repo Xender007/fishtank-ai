@@ -1,319 +1,179 @@
 // =============================================================================
-// train.js - the offline trainer. Run with: node train.js
+// train.js - the offline fish trainer. Run with: node train.js
 // =============================================================================
-// The browser page is for WATCHING. This is for training, and it does the one
-// thing the browser cannot afford to do: it evaluates every brain ALONE.
+// The browser page is for WATCHING. This is for training.
 //
 // -----------------------------------------------------------------------------
-// WHY ALONE, AND WHY IT MATTERS MORE THAN ANYTHING ELSE HERE
+// WHAT CHANGED ON 2026-09-21 (layout v3), and why each default is what it is
 // -----------------------------------------------------------------------------
-// In a tank of 60 fish there is one shark, and it chases the nearest fish. The
-// other 59 are safe for free. So "seconds survived" mostly measures WHETHER
-// SOMEONE ELSE WAS CLOSER - which is position luck, not escape skill. A brain
-// that never learns anything scores well as long as it spawns far away.
+//  1. CO-EVOLUTION. The fish train against the TRAINED shark brain
+//     (champions/shark-history.json), not the brainless chaser. The shark has
+//     learned to beat the school; a fish trained only against a chaser is
+//     trained for an opponent it will not meet on the page.
+//  2. LEARNED TEAMWORK and 6. LEARNED PLANNING: Profiles.v3 hands pack
+//     steering and route choice to the network (see js/config.js).
+//  3. 45 FISH. Every brain is scored as a shoal of 45 copies of itself - the
+//     size the page shows. The previous champion was trained at 8 and 12.
+//  4. HARDER, AND IT STAYS HARD. Two trained sharks, hunger, and a difficulty
+//     ladder that adds a shark whenever the population gets comfortable.
+//  5. A BIGGER POPULATION: 48 brains a generation (was 16), with the target
+//     species count scaled so each species still has ~10 members to shelter a
+//     new neuron while it tunes.
+//  7. HUNGER: fish must eat or starve (CONFIG.hunger).
+//  8. ALL CPU CORES: evaluations run on a worker-thread pool (parallel.js).
 //
-// That is why trained brains kept benchmarking no better than random ones: the
-// thing being selected for was not the thing we wanted.
-//
-// Here, every brain gets its own private tank with one shark and no other fish.
-// The shark has nothing else to chase. Survival time can then only come from
-// escaping, and the score means exactly what it says.
+// -----------------------------------------------------------------------------
+// WHY EACH BRAIN IS SCORED AS A SHOAL OF ITSELF
+// -----------------------------------------------------------------------------
+// In a crowd of different brains one shark chases the nearest fish and the
+// rest are safe for free, so "seconds survived" measures WHETHER SOMEONE ELSE
+// WAS CLOSER (finding #1). A tank full of one brain has no one else to blame:
+// the mean survival of the shoal is that brain's score, and nothing else's.
 //
 // Usage:
-//   node train.js                     100 generations, resuming from the best
-//   node train.js --gens 300          longer
-//   node train.js --fresh             ignore the saved champion and start over
-//   node train.js --pop 120 --trials 6
+//   node train.js                      20 generations, resuming from the champion
+//   node train.js --gens 60 --repeat 5
+//   node train.js --opponent chaser    the old brainless shark
+//   node train.js --rules              hand-written pack steering (control)
+//   node train.js --hand-planner       hand-written route ranking (control)
+//   node train.js --no-hunger          no food, no starvation (control)
+//   node train.js --workers 0          single thread (debugging)
+//   node train.js --fresh              ignore the champion, start from nothing
 // =============================================================================
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { createSimulation } = require('./simulation');
 const { TrainingStore } = require('./training-store');
+const { Pool } = require('./parallel');
+const { snapshotConfig } = require('./evaluation');
 
 const NL = String.fromCharCode(10);
 const ROOT = __dirname;
-const outIndex = process.argv.indexOf('--out');
-const OUT = outIndex >= 0 ? path.resolve(process.argv[outIndex + 1]) : path.join(ROOT, 'champions');
-const store = new TrainingStore(OUT);
-const ARCHIVE = path.join(OUT, 'archive');
 
-// ---- command line ----------------------------------------------------------
-const argv = process.argv.slice(2);
-const arg = (name, fallback) => {
-  const i = argv.indexOf('--' + name);
-  return i >= 0 && argv[i + 1] ? Number(argv[i + 1]) : fallback;
-};
-const FLAG = name => argv.includes('--' + name);
+// ---- the simulation this thread breeds in ------------------------------------
+const S = createSimulation();
+const { CONFIG, Profiles, World, Genome, Evolution, Innovation, Rng, Senses, Persist, SharkHistory } = S;
 
-const GENS   = arg('gens', 20);
-const POP    = arg('pop', 16);
-const TRIALS = arg('trials', 3);
-const SECS   = arg('secs', 60);
-
-// How many fish share the tank during an evaluation, all running the brain
-// being scored. 1 is a pure duel: can this brain escape, personally.
-// Higher numbers score the brain as a SPECIES - the mean survival of a whole
-// shoal of itself - which is a different and harder problem, because identical
-// brains make identical turns, converge onto the same evasive path and pack
-// into a line the shark can harvest. A shoal that survives has to have evolved
-// to spread out, using nothing but what it can already sense.
-const CLONES = arg('clones', 8);
-
-// How many predators share the evaluation tank.
-//
-// This exists because of a ceiling. Training 45 clones against ONE shark, the
-// schooling layer kept 97% of the shoal alive (43.6s of 45s) from generation
-// one - so almost every brain scored almost the same, selection had nothing to
-// choose between them, and the run could not improve. A score that saturates
-// cannot teach, exactly as it could not back when generations were 30s long.
-//
-// Adding predators restores the gradient. Do not overdo it: three sharks once
-// cut survival to 11s and learning collapsed the other way, because outcomes
-// stopped depending on skill. Aim for a mean somewhere around half the cap.
-const SHARKS = arg('sharks', 1);
-
-// Probability that an add-connection mutation looks for a MEMORY edge.
-// --recurrent 0 reproduces the old strictly feed-forward behaviour, which is
-// the control this feature has to beat before it earns its place.
-const RECURRENT = arg('recurrent', -1);
-// Mutable, because --repeat switches it off after the first cycle: only the
-// first may start from nothing, the rest must build on what it produced.
-let FRESH_OVERRIDE = FLAG('fresh');
-for (const [name, value] of Object.entries({ gens: GENS, pop: POP, trials: TRIALS, clones: CLONES, secs: SECS })) {
-  if (!Number.isFinite(value) || value <= 0 || (name !== 'secs' && !Number.isInteger(value))) {
-    throw Error('--' + name + ' must be a positive ' + (name === 'secs' ? 'number' : 'integer'));
-  }
-}
-
-// ---- load the simulation ----------------------------------------------------
-const { CONFIG, World, Genome, Evolution, Innovation, Rng, Senses, Persist } = createSimulation();
-const DISPLAY_CLONES = CONFIG.fish.count;
-
-// Thousands of throwaway worlds get built below; the innovation numbering must
-// survive all of them or shared history is lost.
+// Thousands of throwaway worlds get built by the evaluators; the innovation
+// numbering must survive all of them or shared history is lost. It still has
+// to be initialised ONCE (invariant #7), or the first grown neuron is given id
+// 0 - already an input.
 World.keepInnovation = true;
-
-// ...but it does have to be initialised ONCE. Without this, nextNodeId starts
-// at 0, so the first neuron evolution grows is given id 0 - which is already an
-// input node. The genome then has two different nodes claiming one id, and its
-// index map, depth pass and distance calculation all quietly disagree.
 Innovation.reset();
 
-CONFIG.fish.count = POP;
-CONFIG.evolution.trials = 1;        // the trainer does its own averaging
-
-// CRITICAL. The evaluation tanks below must not evolve anything.
-//
-// Each evaluation builds a private world with one fish. When that fish is
-// eaten, aliveCount() hits zero and world.update() calls nextGeneration() -
-// which breeds, issues new innovation numbers, and ADAPTS THE SHARED SPECIES
-// THRESHOLD. Thousands of evaluations therefore dragged the threshold from
-// 0.25 down to near zero, at which point every single brain landed in a
-// species of its own, each species got a quota of one, and selection stopped
-// happening entirely. The trainer was faithfully copying the population
-// forward and calling it evolution.
-//
-// The trainer does all its own breeding, so the tanks only need to simulate.
+// CRITICAL (invariant #6). The evaluation tanks must not evolve anything: a
+// tank whose last fish dies calls nextGeneration(), which breeds, issues new
+// innovation numbers and adapts the SHARED species threshold. Thousands of
+// evaluations once dragged that threshold to zero and switched selection off
+// entirely while the logs looked fine. The trainer does its own breeding.
 CONFIG.evolution.enabled = false;
-CONFIG.shark.count = SHARKS;
-if (RECURRENT >= 0) CONFIG.genome.recurrentRate = RECURRENT;
-CONFIG.sim.generationSeconds = SECS;
-CONFIG.schooling.enabled = !FLAG('neural-only');
-
-// Scores belong to an environment as well as a genome. Changing the social
-// controller, predator rule, trial duration or physics invalidates old scores.
-const REGIME = CONFIG.schooling.enabled ? 'social-v2' : 'neural-circle-v1';
-const EVALUATION = JSON.stringify({ regime: REGIME, clones: CLONES, seconds: SECS,
-  dt: CONFIG.sim.dt,
-  fish: { speed: CONFIG.fish.maxSpeed, turn: CONFIG.fish.turnRate, radius: CONFIG.fish.radius },
-  shark: CONFIG.shark, tank: CONFIG.tank, senses: CONFIG.senses, schooling: CONFIG.schooling });
-const DISPLAY_EVALUATION = JSON.stringify({ ...JSON.parse(EVALUATION), regime: 'social-v2', clones: DISPLAY_CLONES,
-  schooling: { ...CONFIG.schooling, enabled: true }, seconds: 60, seedBase: 7300001, runs: 12 });
+CONFIG.evolution.trials = 1;
 
 // =============================================================================
-// EVALUATION - one brain, one shark, one empty tank.
+// OPTIONS
 // =============================================================================
-// Returns mean seconds survived across `trials` runs, each from a different
-// starting position. The seed varies per trial AND per generation, so a brain
-// cannot get good at one particular opening and stop there.
-// =============================================================================
-function evaluate(brain, trials, seedBase, options = {}) {
-  const savedCount = CONFIG.fish.count;
-  const savedSeconds = CONFIG.sim.generationSeconds;
-  const clones = options.clones || CLONES;
-  CONFIG.fish.count = clones;
-  CONFIG.sim.generationSeconds = options.seconds || SECS;
-
-  try {
-  let total = 0;
-  const maxTicks = Math.round(CONFIG.sim.generationSeconds / CONFIG.sim.dt) - 1;
-
-  for (let t = 0; t < trials; t++) {
-    CONFIG.seed = seedBase + t * 7919;        // a prime, to avoid seed patterns
-    const w = new World();
-
-    // Every fish in the tank runs the brain being scored. No clone() needed -
-    // nothing here mutates it - but they must be separate objects so each can
-    // hold its own last-decision state.
-    const watched = w.fish.slice();
-    for (const f of watched) f.net = clones === 1 ? brain : brain.clone();
-
-    // Hold references. Once every fish is dead, world.update() respawns the
-    // tank, and reading w.fish afterwards would give newborns with random
-    // brains and an age of zero.
-    let ticks = 0;
-    while (ticks < maxTicks && watched.some(f => f.alive)) {
-      w.update(CONFIG.sim.dt);
-      ticks++;
+function parseOptions(argv) {
+  const arg = (name, fallback) => {
+    const i = argv.indexOf('--' + name);
+    return i >= 0 && argv[i + 1] !== undefined ? Number(argv[i + 1]) : fallback;
+  };
+  const str = (name, fallback) => {
+    const i = argv.indexOf('--' + name);
+    return i >= 0 && argv[i + 1] !== undefined ? argv[i + 1] : fallback;
+  };
+  const flag = name => argv.includes('--' + name);
+  const T = CONFIG.training;
+  const o = {
+    gens: arg('gens', 20),
+    pop: arg('pop', T.population),
+    trials: arg('trials', T.trials),
+    secs: arg('secs', T.seconds),
+    clones: arg('clones', T.clones),
+    sharks: arg('sharks', T.sharks),
+    // 'shark' = the newest trained shark brain (plus a hall of fame), falling
+    // back to the chaser only when no shark has been trained yet.
+    opponent: str('opponent', 'shark'),
+    hall: arg('hall', 1),
+    race: arg('race', 8),
+    raceTrials: arg('race-trials', 9),
+    ladder: !flag('no-ladder'),
+    workers: arg('workers', undefined),
+    recurrent: arg('recurrent', -1),
+    seed: arg('seed', Date.now() >>> 0),
+    keep: arg('keep', 6),
+    repeat: Math.max(1, arg('repeat', 1)),
+    fresh: flag('fresh'),
+    prune: !flag('no-prune'),
+    pruneOnly: flag('prune-only'),
+    neuralOnly: flag('neural-only'),
+    teamwork: !flag('rules'),
+    planner: !flag('hand-planner'),
+    hunger: !flag('no-hunger'),
+    prior: !flag('no-prior'),
+    out: str('out', null) ? path.resolve(str('out', null)) : path.join(ROOT, 'champions'),
+    quiet: flag('quiet'),
+  };
+  for (const name of ['gens', 'pop', 'trials', 'clones', 'secs', 'sharks']) {
+    const v = o[name];
+    if (!Number.isFinite(v) || v <= 0 || (name !== 'secs' && !Number.isInteger(v))) {
+      throw Error('--' + name + ' must be a positive ' + (name === 'secs' ? 'number' : 'integer'));
     }
-
-    // The MEAN across the shoal. Scoring the best fish instead would let one
-    // lucky survivor hide a massacre.
-    let sum = 0;
-    for (const f of watched) sum += f.age;
-    total += sum / watched.length;
   }
-
-  return total / trials;
-  } finally {
-    CONFIG.fish.count = savedCount;
-    CONFIG.sim.generationSeconds = savedSeconds;
-  }
-}
-
-// The held-out test. FIXED seeds, never used in training, so improvement here
-// means the brain got better at escaping rather than better at one scenario.
-function benchmark(brain, runs) {
-  const n = runs || 20;
-  let total = 0;
-  for (let r = 0; r < n; r++) total += evaluate(brain, 1, 500000 + r * 104729);
-  return total / n;
-}
-
-function displayBenchmark(brain) {
-  const savedSchooling = CONFIG.schooling.enabled;
-  CONFIG.schooling.enabled = true;
-  try {
-    let total = 0;
-    for (let i = 0; i < 12; i++) total += evaluate(brain, 1, 7300001 + i * 104729,
-      { clones: DISPLAY_CLONES, seconds: 60 });
-    return total / 12;
-  } finally { CONFIG.schooling.enabled = savedSchooling; }
+  return o;
 }
 
 // =============================================================================
-// PERSISTENCE - the project remembers, and keeps getting better.
+// THE OPPONENT - which shark brains the fish train against.
 // =============================================================================
-function ensureDirs() {
-  for (const d of [OUT, ARCHIVE]) if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
-}
-
-// A solo score and a shoal score are not the same measurement, so each mode
-// keeps its own champion file. Loading one to continue the other would compare
-// numbers that mean different things.
-function championFile() {
-  return path.join(OUT, 'best-' + REGIME + '-shoal' + CLONES + '.json');
-}
-
-function loadChampion() {
-  let file = championFile();
-  // Old champions are compatible ancestors, but their benchmark is not reused.
-  if (!fs.existsSync(file)) file = path.join(OUT,
-    CLONES === 1 ? 'best.json' : 'best-shoal' + CLONES + '.json');
-  if (!fs.existsSync(file)) file = path.join(OUT, 'best-shoal8.json');
-  if (!fs.existsSync(file)) return null;
-  try {
-    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-    const brain = loadIfCompatible(data, 'champion');
-    return brain ? { brain, data } : null;
-  } catch (err) {
-    console.log('  (could not read the saved champion: ' + err.message + ')');
-    return null;
+// The newest trained shark, plus `hall` older champions: a HALL OF FAME. Pure
+// newest-vs-newest co-evolution can cycle - the fish learn to beat today's
+// shark and forget yesterday's, the shark learns yesterday's trick again, and
+// round and round (the Red Queen running in place). Keeping an older shark in
+// the rotation means a trick has to keep working against it too.
+// =============================================================================
+function loadSharkOpponents(out, hall) {
+  const file = path.join(out, 'shark-history.json');
+  if (!fs.existsSync(file)) return [];
+  const history = SharkHistory.fromJSON(JSON.parse(fs.readFileSync(file, 'utf8')));
+  if (!history.length) return [];
+  const newest = history[history.length - 1];
+  const picks = [newest];
+  for (let k = 1; k <= hall && history.length > 1; k++) {
+    // Evenly spaced back through the record: with one, the halfway point.
+    const e = history[Math.floor((history.length - 1) * (1 - k / (hall + 1)))];
+    if (!picks.includes(e)) picks.push(e);
   }
+  return picks;
 }
 
-function saveChampion(brain, score, generation, totalGens) {
-  ensureDirs();
-  const data = Persist.toJSON(brain, {
-    generation,
-    totalGenerations: totalGens,
-    benchmark: score,
-    params: brain.paramCount(),
-    hidden: brain.hiddenCount(),
-    senses: Senses.COUNT,
-    clones: CLONES,
-    sharks: SHARKS,
-    seconds: SECS,
-    evaluation: EVALUATION,
-  });
-  const text = JSON.stringify(data, null, 2);
+const fingerprint = data => crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex').slice(0, 10);
 
-  store.write(path.basename(championFile()), text);
-
-  // The same brain as a plain script. The browser cannot fetch() a local JSON
-  // file from a file:// page (CORS blocks it), but it CAN load a script tag -
-  // so this is how the page picks the champion up with no server involved.
-  // Browser promotion happens only after the separate display-size benchmark.
-  store.archive(REGIME + '-shoal' + CLONES + '-gen' + totalGens, data);
-  return data;
-}
-
-function totalGenerationsSoFar() {
-  const rows = store.read('history.json') || [];
-  return rows.reduce((a, r) => Math.max(a, r.totalGenerations || 0), 0);
-}
-
-// =============================================================================
-// THE TRAINING LOOP
-// =============================================================================
-// A stored brain is only loadable while the sense layout it was trained under
-// still matches - widening vision from 5 rays to 9 invalidates every older
-// champion, and Persist refuses them on purpose. The trainer should start
-// fresh rather than refuse to run.
-function loadIfCompatible(data, what) {
-  if (!data) return null;
-  try { return Persist.fromJSON(data); }
-  catch (err) {
-    console.log('  ignoring the stored ' + what + ': ' + err.message);
-    return null;
-  }
-}
 // =============================================================================
 // PRUNING - keep the record useful, not merely large.
 // =============================================================================
-// Two kinds of file stop being worth keeping.
-//
-// OBSOLETE: a brain saved under a different sense layout. When vision widened
-// from 5 rays to 9, every older champion became unloadable - Persist refuses
-// them, correctly, because their inputs mean something different now. They
-// cannot be run, compared, or resumed from. They are not history, they are
-// litter.
-//
-// SUPERSEDED: archived snapshots that are neither among the best nor among the
-// most recent. The archive exists so a good brain is never lost to a bad run;
-// it does not need every step of the climb.
-//
-// What is never touched: history.json (the accumulating record of every
-// training run, which is the thing that makes progress legible across
-// sessions), and any brain that still matches the current sense layout and is
-// either the best or the newest.
+// OBSOLETE: a brain saved under a sense layout that can neither be loaded nor
+// migrated. Layout v2 (12 inputs) is NOT obsolete: v3 appended senses, so v2
+// brains migrate (Genome.migrateLegacy) and are kept.
+// SUPERSEDED: archived snapshots that are neither among the best `keep` nor
+// among the two most recent.
+// Never touched: history.json and training-progress.json.
 // =============================================================================
-
 function readJsonish(file) {
   try {
     let text = fs.readFileSync(file, 'utf8');
-    // best.js and its backups are an assignment, not bare JSON.
+    // best.js and shark-best.js are an assignment, not bare JSON.
     const eq = text.indexOf('=');
     if (!text.trimStart().startsWith('{') && eq > 0) {
-      text = text.slice(eq + 1).trim().replace(/;s*$/, '');
+      text = text.slice(eq + 1).trim().replace(/;\s*$/, '');
     }
     return JSON.parse(text);
   } catch (err) { return null; }
 }
 
 // How many INPUT nodes a stored brain expects. Null when the file is not a
-// brain at all, in which case it is left alone.
+// fish brain at all, in which case it is left alone.
 function storedSenseCount(data) {
   if (!data || typeof data !== 'object') return null;
   if (data.kind === 'genome') {
@@ -326,235 +186,330 @@ function storedSenseCount(data) {
   return null;
 }
 
-const NEVER_PRUNE = new Set(['history.json', 'training-progress.json']);
+const loadable = n => n === null || n === Senses.COUNT || n === Senses.LEGACY_V2_COUNT;
+const NEVER_PRUNE = new Set(['history.json', 'training-progress.json', 'coevolution.json']);
 
-function prune(keep) {
-  if (!fs.existsSync(OUT)) return;
+function prune(out, keep) {
+  if (!fs.existsSync(out)) return;
   const removed = { obsolete: 0, superseded: 0 };
-
-  // --- top level: anything built for a different sense layout ---
-  for (const name of fs.readdirSync(OUT)) {
+  for (const name of fs.readdirSync(out)) {
     if (NEVER_PRUNE.has(name)) continue;
-    const file = path.join(OUT, name);
+    const file = path.join(out, name);
     if (fs.statSync(file).isDirectory()) continue;
-    if (!/.(json|js|bak)$/.test(name)) continue;
-
-    const senses = storedSenseCount(readJsonish(file));
-    if (senses !== null && senses !== Senses.COUNT) {
-      fs.unlinkSync(file);
-      removed.obsolete++;
+    if (!/\.(json|js|bak)$/.test(name)) continue;
+    if (!loadable(storedSenseCount(readJsonish(file)))) { fs.unlinkSync(file); removed.obsolete++; }
+  }
+  const archive = path.join(out, 'archive');
+  if (fs.existsSync(archive)) {
+    const entries = [];
+    for (const name of fs.readdirSync(archive)) {
+      const file = path.join(archive, name);
+      const data = readJsonish(file);
+      if (!loadable(storedSenseCount(data))) { fs.unlinkSync(file); removed.obsolete++; continue; }
+      entries.push({ file, score: (data && data.meta && data.meta.benchmark) || 0, time: fs.statSync(file).mtimeMs });
     }
+    const survivors = new Set();
+    entries.slice().sort((a, b) => b.score - a.score).slice(0, keep).forEach(e => survivors.add(e.file));
+    // A run in progress must never delete the snapshot it just wrote.
+    entries.slice().sort((a, b) => b.time - a.time).slice(0, 2).forEach(e => survivors.add(e.file));
+    for (const e of entries) if (!survivors.has(e.file)) { fs.unlinkSync(e.file); removed.superseded++; }
   }
-
-  // --- archive: drop obsolete, then keep the best and the newest ---
-  if (!fs.existsSync(ARCHIVE)) return report(removed);
-  const entries = [];
-  for (const name of fs.readdirSync(ARCHIVE)) {
-    const file = path.join(ARCHIVE, name);
-    const data = readJsonish(file);
-    const senses = storedSenseCount(data);
-    if (senses !== null && senses !== Senses.COUNT) {
-      fs.unlinkSync(file);
-      removed.obsolete++;
-      continue;
-    }
-    entries.push({
-      file,
-      score: (data && data.meta && data.meta.benchmark) || 0,
-      time: fs.statSync(file).mtimeMs,
-    });
-  }
-
-  const survivors = new Set();
-  entries.slice().sort((a, b) => b.score - a.score).slice(0, keep)
-         .forEach(e => survivors.add(e.file));
-  // Always keep the two most recent as well, even if they scored poorly - a
-  // run in progress should not delete the snapshot it just wrote.
-  entries.slice().sort((a, b) => b.time - a.time).slice(0, 2)
-         .forEach(e => survivors.add(e.file));
-
-  for (const e of entries) {
-    if (survivors.has(e.file)) continue;
-    fs.unlinkSync(e.file);
-    removed.superseded++;
-  }
-  report(removed);
-}
-
-function report(removed) {
   const total = removed.obsolete + removed.superseded;
-  if (!total) return;
-  console.log('  pruned ' + total + ' file(s): ' + removed.obsolete +
-              ' from an older sense layout, ' + removed.superseded + ' superseded');
+  if (total) console.log('  pruned ' + total + ' file(s): ' + removed.obsolete +
+                         ' unloadable, ' + removed.superseded + ' superseded');
 }
-function main() {
-  ensureDirs();
-  if (!FLAG('no-prune')) prune(arg('keep', 6));
-  if (FLAG('prune-only')) return;
-  const runSeed = arg('seed', Date.now() >>> 0);
-  const rng = new Rng(runSeed);
-  let carried = totalGenerationsSoFar();
+
+// =============================================================================
+// THE TRAINING RUN
+// =============================================================================
+// The page shows 45 fish; remember that number before any option changes it.
+const DISPLAY_CLONES = CONFIG.fish.count;
+
+// Seeds per held-out benchmark. Was 20 (and 12 for the page setting). One 45-fish
+// trial moves by ~2.9s on luck alone, so 20 runs left a standard error of
+// ~0.65s - more than twice the real difference between a champion's mutated
+// children (~0.3s). A lucky baseline then blocked every later brain. 36 runs
+// brings it to ~0.48s; it is a ratchet, so the bar must not be set by luck.
+const BENCH_RUNS = 36;
+
+async function trainFish(o, env) {
+  env = env || {};
+  const out = o.out;
+  const store = new TrainingStore(out);
+  for (const d of [out, path.join(out, 'archive')]) if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+  if (o.prune) prune(out, o.keep);
+  if (o.pruneOnly) return null;
+
+  // ---- the environment: exactly what the page runs ----
+  Profiles.v3({ teamwork: o.teamwork, planner: o.planner, hunger: o.hunger });
+  CONFIG.schooling.enabled = !o.neuralOnly;
+  if (o.recurrent >= 0) CONFIG.genome.recurrentRate = o.recurrent;
+  CONFIG.genome.targetSpecies = Math.max(4, Math.round(o.pop / CONFIG.training.brainsPerSpecies));
+  Evolution.threshold = null;
+
+  const opponents = o.opponent === 'chaser' ? [] : loadSharkOpponents(out, o.hall);
+  const sharkJSON = opponents.map(e => e.brain.toJSON());
+  const pageShark = sharkJSON.length ? [sharkJSON[0]] : [];
+  const opponentLabel = opponents.length
+    ? 'trained shark gen ' + opponents.map(e => e.generation).join(' + gen ')
+    : 'brainless chaser' + (o.opponent === 'chaser' ? '' : ' (no trained shark found)');
+
+  // ---- what a score MEANS. Two scores are comparable only if every one of
+  // these matches, so they are fingerprinted into the champion file. ----
+  const REGIME = o.neuralOnly ? 'v3-neural'
+    : 'v3-' + (o.teamwork ? 'team' : 'rules') + '-' + (o.planner ? 'critic' : 'hand') + (o.hunger ? '-hunger' : '');
+  const environment = {
+    layout: 'v3', dt: CONFIG.sim.dt,
+    fish: { speed: CONFIG.fish.maxSpeed, turn: CONFIG.fish.turnRate, radius: CONFIG.fish.radius },
+    shark: { radius: CONFIG.shark.radius, speed: CONFIG.shark.maxSpeed, turn: CONFIG.shark.turnRate,
+             circleLimit: CONFIG.shark.circleLimit, circleBreakSeconds: CONFIG.shark.circleBreakSeconds },
+    sharkBrain: { starve: CONFIG.sharkBrain.starveSeconds, respawn: CONFIG.sharkBrain.respawnSeconds,
+                  minSpeed: CONFIG.sharkBrain.minSpeedFraction },
+    tank: CONFIG.tank, senses: CONFIG.senses, schooling: CONFIG.schooling,
+    learned: CONFIG.learned, hunger: CONFIG.hunger,
+  };
+  const EVALUATION = JSON.stringify({ regime: REGIME, clones: o.clones, seconds: o.secs, sharks: o.sharks,
+    runs: BENCH_RUNS, seedBase: 500000, opponents: fingerprint(sharkJSON), environment });
+  const DISPLAY_EVALUATION = JSON.stringify({ regime: REGIME, clones: DISPLAY_CLONES, seconds: 60, sharks: 1,
+    runs: BENCH_RUNS, seedBase: 7300001, opponents: fingerprint(pageShark), environment });
+  const championFile = path.join(out, 'best-' + REGIME + '-shoal' + o.clones + '.json');
+
+  const pool = env.pool || new Pool(o.workers);
+  const config = snapshotConfig(CONFIG);
+  const job = (brain, trials, seedBase, extra) => Object.assign({
+    kind: 'fish', brain: Persist.toJSON(brain), trials, seedBase, clones: o.clones, seconds: o.secs,
+    sharks: o.sharks, sharkBrains: sharkJSON, config }, extra);
+
+  // The held-out test. FIXED seeds never used in training, so a rise here means
+  // the brain got better at escaping rather than at one set of openings.
+  async function benchmark(brain) {
+    const r = await pool.map(Array.from({ length: BENCH_RUNS }, (_, i) => job(brain, 1, 500000 + i * 104729)));
+    return r.reduce((a, x) => a + x.fitness, 0) / r.length;
+  }
+  // The page's own setting: 45 fish, ONE shark (the newest), 60 seconds.
+  async function displayBenchmark(brain) {
+    const r = await pool.map(Array.from({ length: BENCH_RUNS }, (_, i) => job(brain, 1, 7300001 + i * 104729,
+      { clones: DISPLAY_CLONES, seconds: 60, sharks: 1, sharkBrains: pageShark })));
+    return r.reduce((a, x) => a + x.fitness, 0) / r.length;
+  }
+
+  // ---- the starting brain ----
+  // A v2 brain (12 inputs) is migrated rather than refused; --no-prior wires
+  // its new senses at zero instead of the hand prior (the control).
+  const load = data => (storedSenseCount(data) === Senses.LEGACY_V2_COUNT && Senses.COUNT !== Senses.LEGACY_V2_COUNT
+    ? Genome.migrateLegacy(data, { prior: o.prior }) : Persist.fromJSON(data));
+  function loadChampion() {
+    const names = fs.readdirSync(out);
+    const others = names.filter(n => /^best-.*\.json$/.test(n))
+      .map(n => ({ n, t: fs.statSync(path.join(out, n)).mtimeMs })).sort((a, b) => b.t - a.t).map(x => x.n);
+    const order = [path.basename(championFile), 'display-best.json', ...others];
+    for (const name of [...new Set(order)]) {
+      const file = path.join(out, name);
+      if (!fs.existsSync(file)) continue;
+      try {
+        const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+        return { brain: load(data), data, name };
+      } catch (err) { console.log('  ignoring ' + name + ': ' + err.message); }
+    }
+    return null;
+  }
+
+  const rng = new Rng(o.seed);
+  const carried = (store.read('history.json') || []).reduce((a, r) => Math.max(a, r.totalGenerations || 0), 0);
   const runId = new Date().toISOString() + '-' + process.pid;
   const t0 = Date.now();
 
-  // ---- the starting population ----
   let population = [];
-  const saved = FRESH_OVERRIDE ? null : loadChampion();
-
+  const saved = o.fresh ? null : loadChampion();
   if (saved) {
-    console.log('\n  resuming from a saved champion  ' +
-                '(' + saved.data.meta.benchmark + 's, ' +
-                saved.data.meta.params + ' params, after ' +
-                (saved.data.meta.totalGenerations || '?') + ' generations)');
-    // One untouched copy, the rest mutated children. The saved brain becomes
-    // the ancestor of the whole new run rather than one individual in a crowd.
+    const m = saved.data.meta || {};
+    console.log('\n  resuming from ' + saved.name + (saved.brain.migratedFrom ? ' (migrated from layout ' +
+      saved.brain.migratedFrom + (o.prior ? ', teamwork prior' : ', zero prior') + ')' : '') +
+      ' · ' + saved.brain.paramCount() + ' params · after ' + (m.totalGenerations || '?') + ' generations');
+    // One untouched copy, the rest mutated children: the saved brain becomes
+    // the ancestor of the whole run rather than one individual in a crowd.
     Innovation.absorb(saved.brain);
     population.push(saved.brain.clone());
-    while (population.length < POP) {
+    while (population.length < o.pop) {
       const child = saved.brain.clone();
       child.mutate(rng, CONFIG.evolution.mutationRate, CONFIG.evolution.mutationStrength);
       population.push(child);
     }
   } else {
     console.log('\n  starting fresh');
-    for (let i = 0; i < POP; i++) population.push(Genome.minimal(rng));
+    for (let i = 0; i < o.pop; i++) population.push(Genome.minimal(rng));
   }
 
-  // A benchmark carried over from a DIFFERENT evaluation mode is not a number
-  // this run can be compared against - a solo score and a shoal score measure
-  // different things. Keep the brain, discard the score.
+  console.log('  environment: ' + REGIME + ' · opponent: ' + opponentLabel + ' · ' + pool.size + ' worker thread(s)');
+  // A score from a different environment is not comparable: keep the brain,
+  // re-measure the score before anything is allowed to replace it.
   const sameMode = saved && saved.data.meta && saved.data.meta.evaluation === EVALUATION;
-  if (saved && !sameMode) {
-    console.log('  (its score was measured in a different mode, so starting the' +
-                ' scoreboard fresh)');
-  }
-  // Re-evaluate the ancestor before replacing it, so a worse first generation
-  // cannot overwrite a stronger imported brain just because its score was old.
-  let bestScore = sameMode ? saved.data.meta.benchmark : saved ? benchmark(saved.brain) : -Infinity;
   let bestBrain = saved ? saved.brain : null;
+  let bestScore = sameMode ? saved.data.meta.benchmark : saved ? await benchmark(saved.brain) : -Infinity;
+
+  function metaFor(brain, extra) {
+    return Object.assign({ senseLayout: 'v3', regime: REGIME, params: brain.paramCount(), hidden: brain.hiddenCount(),
+      senses: Senses.COUNT, clones: o.clones, sharks: o.sharks, seconds: o.secs, opponent: opponentLabel,
+      opponentGenerations: opponents.map(e => e.generation),
+      critic: brain.critic && !brain.critic.isHand() ? brain.critic.describe() : 'hand-written ranking' }, extra);
+  }
+  function saveChampion(brain, score, generation, total) {
+    const data = Persist.toJSON(brain, metaFor(brain, { generation, totalGenerations: total, benchmark: score,
+      evaluation: EVALUATION }));
+    store.write(path.basename(championFile), JSON.stringify(data, null, 2));
+    store.archive(REGIME + '-shoal' + o.clones + '-gen' + total, data);
+  }
   if (saved && !sameMode) saveChampion(bestBrain, bestScore, 0, carried);
 
-  // Keep a separate display champion: an eight-fish training score cannot
-  // prove that a brain improves the 45-fish school shown on the page.
+  // The page's champion is chosen by the PAGE's setting, separately.
   let displayData = store.display();
-  let displayBrain = loadIfCompatible(displayData, 'display champion') || bestBrain;
-  if (displayData && !displayBrain) displayData = null;
-  console.log('  validating the display champion with ' + DISPLAY_CLONES + ' fish...');
-  let displayScore = displayData && displayData.meta.displayEvaluation === DISPLAY_EVALUATION
-    ? displayData.meta.displayBenchmark : displayBrain ? displayBenchmark(displayBrain) : -Infinity;
-  function publishDisplay(brain, meta) {
-    displayData = Persist.toJSON(brain, { ...meta, params: brain.paramCount(), hidden: brain.hiddenCount(),
+  const displaySame = displayData && displayData.meta && displayData.meta.displayEvaluation === DISPLAY_EVALUATION;
+  let displayBrain = displaySame ? load(displayData) : bestBrain;
+  let displayScore = displaySame ? displayData.meta.displayBenchmark : displayBrain ? await displayBenchmark(displayBrain) : -Infinity;
+  function publishDisplay(brain, extra) {
+    displayData = Persist.toJSON(brain, metaFor(brain, Object.assign({}, extra, {
       displayBenchmark: displayScore, displayEvaluation: DISPLAY_EVALUATION,
-      displayClones: DISPLAY_CLONES, displaySeconds: 60 });
+      displayClones: DISPLAY_CLONES, displaySeconds: 60, displaySharks: 1 })));
     store.publish(displayData);
   }
-  if (displayBrain) publishDisplay(displayBrain, displayData ? displayData.meta : { totalGenerations: carried });
-  console.log('  display baseline: ' + displayScore.toFixed(3) + 's of 60s');
+  if (displayBrain && !displaySame) publishDisplay(displayBrain, { totalGenerations: carried });
+  console.log('  baseline: held-out ' + bestScore.toFixed(2) + 's of ' + o.secs + 's · page setting ' +
+              displayScore.toFixed(2) + 's of 60s');
 
+  let trainSharks = o.sharks;
   function recordProgress(completed, status) {
     return store.progress({ runId, started: new Date(t0).toISOString(), finished: new Date().toISOString(), status,
-      generations: completed, requestedGenerations: GENS, totalGenerations: carried + completed,
-      population: POP, trials: TRIALS, clones: CLONES, seconds: SECS, seed: runSeed, evaluation: EVALUATION,
-      benchmark: bestScore, displayBenchmark: displayScore,
+      generations: completed, requestedGenerations: o.gens, totalGenerations: carried + completed,
+      population: o.pop, trials: o.trials, clones: o.clones, seconds: o.secs, sharks: o.sharks,
+      trainingSharks: trainSharks, regime: REGIME, opponent: opponentLabel, seed: o.seed, workers: pool.size,
+      evaluation: EVALUATION, benchmark: bestScore, displayBenchmark: displayScore,
       params: bestBrain ? bestBrain.paramCount() : 0, hidden: bestBrain ? bestBrain.hiddenCount() : 0,
       minutes: (Date.now() - t0) / 60000 });
   }
   recordProgress(0, 'running');
 
-  console.log('  population ' + POP + ' \u00b7 ' + TRIALS + ' trials each \u00b7 ' +
-              SECS + 's max \u00b7 ' + GENS + ' generations');
-  console.log('  each brain controls ' + CLONES + ' fish; regime ' + REGIME + '\n');
-  console.log('  gen     mean    best   params  hidden  memory  species     held-out');
-  console.log('  ' + '-'.repeat(72));
+  console.log('  population ' + o.pop + ' · ' + o.trials + ' trials' +
+              (o.race ? ' (top ' + o.race + ' raced +' + o.raceTrials + ')' : '') + ' · ' + o.secs + 's · ' + o.clones +
+              ' fish per shoal · target species ' + CONFIG.genome.targetSpecies + '\n');
+  console.log('  gen    mean    best  eaten starved sharks params hidden  mem spec   held-out');
+  console.log('  ' + '-'.repeat(86));
 
-  for (let gen = 1; gen <= GENS; gen++) {
-    // ---- SCORE: each brain alone, several times ----
-    // The seed base moves every generation, so the population is never
-    // optimising against one fixed set of openings.
+  for (let gen = 1; gen <= o.gens; gen++) {
+    const tg = Date.now();
+    // The seed base moves every generation, so the population never optimises
+    // against one fixed set of openings. Every brain in a generation faces the
+    // SAME seeds, so differences are differences in brains.
     const seedBase = 1000 + (carried + gen) * 31013;
-    const scored = population.map(brain => ({
-      brain,
-      fitness: evaluate(brain, TRIALS, seedBase),
-    }));
+    const results = await pool.map(population.map(b => job(b, o.trials, seedBase, { sharks: trainSharks })));
+    const scored = population.map((brain, i) => ({ brain, fitness: results[i].fitness }));
 
-    let sum = 0, best = -Infinity, bestOfGen = null;
-    for (const s of scored) {
-      sum += s.fitness;
-      if (s.fitness > best) { best = s.fitness; bestOfGen = s.brain; }
+    // -------------------------------------------------------------------------
+    // RACING - re-measure the finalists before believing them.
+    // -------------------------------------------------------------------------
+    // MEASURED (2026-09-21): 48 mutated children of the champion, scored twice
+    // on independent seed sets, 3 trials each, 45 fish, 3 trained sharks: the
+    // two rankings correlated at r = 0.04. The spread BETWEEN children (1.1s)
+    // was almost all luck; one brain re-scored on 48 seed sets moved with an
+    // sd of 1.7s. So "the best of 48" was mostly the luckiest of 48 - finding
+    // #2 again, in a harder world - and it became the elite that the next
+    // generation descends from.
+    //
+    // Scoring all 48 twelve times would cost 4x. Instead the top few get
+    // extra trials on fresh (shared) seeds, and the champion and elites are
+    // chosen on those. No unverified brain may outrank a verified finalist:
+    // anything that was not re-measured is capped at the lowest finalist's
+    // corrected score, so luck alone can no longer make an elite.
+    // -------------------------------------------------------------------------
+    if (o.race > 0 && o.raceTrials > 0) {
+      const order = scored.map((s, i) => i).sort((a, b) => scored[b].fitness - scored[a].fitness).slice(0, o.race);
+      const extra = await pool.map(order.map(i => job(population[i], o.raceTrials, seedBase + 777767, { sharks: trainSharks })));
+      let floor = Infinity;
+      order.forEach((i, k) => {
+        const s = scored[i];
+        s.fitness = (s.fitness * o.trials + extra[k].fitness * o.raceTrials) / (o.trials + o.raceTrials);
+        s.raced = true;
+        floor = Math.min(floor, s.fitness);
+      });
+      for (const s of scored) if (!s.raced && s.fitness > floor) s.fitness = floor;
     }
-    const mean = sum / scored.length;
 
-    // ---- BENCHMARK the generation's champion on unseen seeds ----
+    // The population mean is the plain first-pass mean (every brain measured
+    // the same way); "best" is the best RACED score.
+    let sum = 0, best = -Infinity, bestOfGen = null, eaten = 0, starved = 0;
+    scored.forEach((s, i) => {
+      sum += results[i].fitness; eaten += results[i].eaten; starved += results[i].starved;
+      if (s.fitness > best) { best = s.fitness; bestOfGen = s.brain; }
+    });
+    const mean = sum / scored.length;
+    const sharksThisGen = trainSharks;
+
+    // THE DIFFICULTY LADDER (item 4). A score that sits near the cap cannot
+    // teach (finding #4); one near zero cannot either (finding #5).
+    let ladder = '';
+    const frac = mean / o.secs, T = CONFIG.training;
+    if (o.ladder && frac > T.raiseAbove && trainSharks < T.maxSharks) { trainSharks++; ladder = ' +shark'; }
+    else if (o.ladder && frac < T.lowerBelow && trainSharks > 1) { trainSharks--; ladder = ' -shark'; }
+
     let note = '';
-    if (gen % 5 === 0 || gen === GENS) {
-      const score = benchmark(bestOfGen);
+    if (gen % 5 === 0 || gen === o.gens) {
+      const [score, screen] = await Promise.all([benchmark(bestOfGen), displayBenchmark(bestOfGen)]);
       note = score.toFixed(1) + 's';
       if (score > bestScore) {
-        bestScore = score;
-        bestBrain = bestOfGen.clone();
+        bestScore = score; bestBrain = bestOfGen.clone();
         saveChampion(bestBrain, score, gen, carried + gen);
-        note += '  SAVED';
+        note += ' SAVED';
       }
-      const screenScore = displayBenchmark(bestOfGen);
-      note += ' / display ' + screenScore.toFixed(2) + 's';
-      if (screenScore > displayScore) {
-        displayScore = screenScore;
-        displayBrain = bestOfGen.clone();
-        publishDisplay(displayBrain, { generation: gen, totalGenerations: carried + gen,
-          benchmark: score, evaluation: EVALUATION, clones: CLONES });
-        note += '  PROMOTED';
+      note += ' / page ' + screen.toFixed(1) + 's';
+      if (screen > displayScore) {
+        displayScore = screen; displayBrain = bestOfGen.clone();
+        publishDisplay(displayBrain, { generation: gen, totalGenerations: carried + gen, benchmark: score,
+          evaluation: EVALUATION });
+        note += ' PROMOTED';
       }
     }
 
-    console.log('  ' + String(gen).padEnd(6) +
-                mean.toFixed(1).padStart(7) + 's' +
-                best.toFixed(1).padStart(7) + 's' +
-                bestOfGen.paramCount().toString().padStart(8) +
-                bestOfGen.hiddenCount().toString().padStart(8) +
-                (bestOfGen.memoryCount ? bestOfGen.memoryCount() : 0).toString().padStart(8) +
-                String(Evolution.speciate(scored).length).padStart(8) +
-                note.padStart(14));
+    const n = scored.length;
+    console.log('  ' + String(gen).padEnd(5) + mean.toFixed(1).padStart(6) + 's' + best.toFixed(1).padStart(7) + 's' +
+      (eaten / n).toFixed(1).padStart(7) + (starved / n).toFixed(1).padStart(8) + String(sharksThisGen).padStart(7) +
+      String(bestOfGen.paramCount()).padStart(7) + String(bestOfGen.hiddenCount()).padStart(7) +
+      String(bestOfGen.memoryCount()).padStart(5) + String(Evolution.speciate(scored).length).padStart(5) +
+      '  ' + ((Date.now() - tg) / 1000).toFixed(0).padStart(3) + 's ' + note + ladder);
 
-    // ---- BREED ----
-    const result = CONFIG.genome.useSpecies
-      ? Evolution.breedSpeciated(scored, rng)
-      : { brains: Evolution.breed(scored, rng) };
+    // Every generation's champion goes into the page's dropdown.
+    store.fishHistory([{ generation: carried + gen, score: +best.toFixed(3), mean: +mean.toFixed(3),
+      sharks: sharksThisGen, regime: REGIME, brain: Persist.toJSON(bestOfGen, { generation: carried + gen }) }]);
+
+    const result = CONFIG.genome.useSpecies ? Evolution.breedSpeciated(scored, rng) : { brains: Evolution.breed(scored, rng) };
     population = result.brains;
-    recordProgress(gen, gen === GENS ? 'complete' : 'running');
+    recordProgress(gen, gen === o.gens ? 'complete' : 'running');
   }
+
+  if (displayBrain) publishDisplay(displayBrain, Object.assign({}, displayData.meta, { trainingTotalGenerations: carried + o.gens }));
+  if (!env.pool) pool.close();
 
   const mins = ((Date.now() - t0) / 60000).toFixed(1);
-  if (displayBrain) publishDisplay(displayBrain, { ...displayData.meta, trainingTotalGenerations: carried + GENS });
-  const runs = (store.read('history.json') || []).length;
-
-  console.log('\n  done in ' + mins + ' min \u00b7 training run #' + runs +
-              ' \u00b7 ' + (carried + GENS) + ' generations of accumulated evolution');
-  console.log('  best held-out survival: ' + bestScore.toFixed(1) + 's of ' + SECS + 's' +
-              (bestBrain ? '  (' + bestBrain.paramCount() + ' params, ' +
-               bestBrain.hiddenCount() + ' hidden)' : ''));
-  console.log('  improvements save to ' + championFile() + ' and champions/best.js');
-  console.log('  run again to continue from here, or --fresh to start over\n');
+  console.log('\n  done in ' + mins + ' min · ' + (carried + o.gens) + ' generations of accumulated evolution');
+  console.log('  held-out: ' + bestScore.toFixed(2) + 's of ' + o.secs + 's · page setting: ' +
+              displayScore.toFixed(2) + 's of 60s');
+  if (displayBrain && displayBrain.critic) console.log('  page champion\'s planner: ' + displayBrain.critic.describe());
+  return { bestBrain, bestScore, displayBrain, displayScore, regime: REGIME, opponents };
 }
 
 // ---------------------------------------------------------------------------
-// KEEP GOING
-// ---------------------------------------------------------------------------
-// --repeat N runs N cycles back to back. Each cycle resumes from the champion
-// the previous one saved and prunes before it starts, so a single command can
-// be left running and the record stays tidy while it improves.
-//
-// Cycles rather than simply a larger --gens because each one re-reads the
-// saved champion, re-runs the held-out benchmark and writes a history row.
-// If a cycle goes badly the next starts from the last brain that actually
-// scored well, instead of carrying a bad population forward for hours.
+// KEEP GOING: --repeat N runs N cycles, each resuming from the champion the
+// previous one saved. If a cycle goes badly the next starts from the last
+// brain that actually scored well, instead of carrying a bad population on.
 // ---------------------------------------------------------------------------
 if (require.main === module) {
-  const cycles = Math.max(1, arg('repeat', 1));
-  for (let cycle = 1; cycle <= cycles; cycle++) {
-    if (cycles > 1) console.log(NL + '  ===== cycle ' + cycle + ' of ' + cycles + ' =====');
-    main();
-    // Only the first cycle may start fresh; the rest must build on it.
-    FRESH_OVERRIDE = false;
-  }
+  (async () => {
+    const o = parseOptions(process.argv.slice(2));
+    for (let cycle = 1; cycle <= o.repeat; cycle++) {
+      if (o.repeat > 1) console.log(NL + '  ===== cycle ' + cycle + ' of ' + o.repeat + ' =====');
+      const r = await trainFish(o);
+      if (!r) break;
+      o.fresh = false;       // only the first cycle may start from nothing
+    }
+  })().catch(err => { console.error(err); process.exitCode = 1; });
 }
-module.exports = { evaluate, benchmark, displayBenchmark, loadChampion, championFile, EVALUATION, DISPLAY_EVALUATION };
+
+module.exports = { trainFish, parseOptions, loadSharkOpponents, prune, S };

@@ -37,6 +37,7 @@ const Render = {
 
     this.background(ctx, world);
     this.drawMotes(ctx, world);
+    this.food(ctx, world);
     this.fishWakes(ctx, world);
     for (const s of world.sharks) this.wake(ctx, s, true);   // one or two: cheap
     if (Schooling.active(world)) this.packs(ctx, world, view);
@@ -55,6 +56,7 @@ const Render = {
     this.escortLines(ctx, world);
     for (const f of world.fish) if (!f.alive) this.deadFish(ctx, f);
     for (const f of world.fish) if (f.alive) this.fish(ctx, f, view.showLineage, Schooling.active(world));
+    this.hungryFish(ctx, world);
 
     // With nobody under the cursor the brain panel shows a default fish; ring
     // it so it is obvious whose network is on screen.
@@ -516,9 +518,44 @@ const Render = {
     ctx.restore();
   },
 
+  // ---------------------------------------------------------------------------
+  // FOOD, and who is running out of it (CONFIG.hunger).
+  // ---------------------------------------------------------------------------
+  // Forty pellets in ONE path and one fill: drawing them one by one is forty
+  // separate rasterisations a frame for dots two pixels across.
+  food(ctx, world) {
+    if (!world.food || !world.food.length) return;
+    const r = CONFIG.hunger.pelletRadius * 0.7;
+    ctx.save();
+    ctx.fillStyle = 'rgba(170, 225, 110, 0.85)';
+    ctx.beginPath();
+    for (const p of world.food) { ctx.moveTo(p.x + r, p.y); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); }
+    ctx.fill();
+    ctx.restore();
+  },
+
+  // A fish below a third of its energy gets a thin amber arc showing how much
+  // is left - the same idea as the shark's hunger ring, sized for a fish.
+  hungryFish(ctx, world) {
+    if (!CONFIG.hunger.enabled) return;
+    ctx.save();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(255, 176, 64, 0.85)';
+    ctx.beginPath();
+    for (const f of world.fish) {
+      if (!f.alive || f.energy >= 0.33) continue;
+      const r = (f.radius ? f.radius() : CONFIG.fish.radius) * 2.4;
+      ctx.moveTo(f.x, f.y - r);
+      ctx.arc(f.x, f.y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (f.energy / 0.33));
+    }
+    ctx.stroke();
+    ctx.restore();
+  },
+
   // A corpse: same silhouette, drained of colour, tail stilled. Left on screen
   // as a map of WHERE fish die - watch where these cluster, it tells you what
-  // evolution is actually up against.
+  // evolution is actually up against. A fish that STARVED is tinted amber, so
+  // the two ways to die can be told apart at a glance.
   deadFish(ctx, f) {
     const r = f.radius ? f.radius() : CONFIG.fish.radius;
     const L = r * 3.0, H = r * 0.95;
@@ -526,7 +563,7 @@ const Render = {
     ctx.save();
     ctx.translate(f.x, f.y);
     ctx.rotate(f.heading);
-    ctx.fillStyle = 'rgba(200, 225, 235, 0.10)';
+    ctx.fillStyle = f.starved ? 'rgba(255, 190, 110, 0.16)' : 'rgba(200, 225, 235, 0.10)';
     ctx.beginPath();
     ctx.moveTo(L * 0.60, 0);
     ctx.quadraticCurveTo(L * 0.05, -H, -L * 0.40, 0);

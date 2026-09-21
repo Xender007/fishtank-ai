@@ -1,13 +1,69 @@
 # Learning Neural Networks by Evolving Fish That Escape a Shark
 
-> Latest (2026-09-21): the shark has an OPTIONAL brain, by explicit request — see
-> "Stage 9, by request" below. It is off for every test and trainer.
+> Latest (2026-09-21): Stage 10 — learned teamwork, an evolved route critic, fish hunger,
+> multi-core co-evolution. Off for every test (Profiles.v3 switches it on).
+>
+> Before that: the shark got an OPTIONAL brain — see "Stage 9, by request" below.
 >
 > Earlier update (2026-09-21): the fish now use coordinated packs
 > and a social escape planner around the saved neural reflex. The predator still
 > has no brain; the requested three-circle correction is its only new rule.
 > Earlier stages below are historical plans/findings, not instructions to stop
 > the current work or to implement predator learning. See the latest entry below.
+
+## Stage 10, by request — learned teamwork, learned planning, hunger, co-evolution (2026-09-21)
+
+The request was eight changes: (1) train the fish against the trained shark, (2) learn
+the teamwork, (3) train at 45 fish, (4) harder training, (5) a bigger population, (6) let
+the brain drive the escape planner, (7) a fish survival instinct, and (8) use all CPU cores.
+All eight are built; HANDOFF.md has the file-by-file map.
+
+**The design choice that made 2, 6 and 7 possible: layout v3.** A network cannot learn to
+use information it is never given. Until now the pack rules read the pack, the alarm and
+the neighbours, but the network never saw any of them. Layout v3 appends 11 senses. It
+only APPENDS, so the old 12 inputs keep their meaning, and for the first time a layout
+change does not throw every trained brain away: v2 brains are migrated.
+
+**Teamwork** now comes from the network's own output whenever no threat is known. The
+packs, the alpha and the alarm relay remain: they are how fish communicate. What a fish
+does with that information is now learned. The migrated weights start from a prior
+translated from the old rules. That is a starting point, not a rule: the weights mutate
+like any other.
+
+**Planning** keeps its physics forecast (imagining the future is not learned), but choosing
+between futures is now an evolved critic in every genome. At its initial values it is my
+hand formula, bit for bit (tested), so any change in behaviour is evolution's doing.
+
+**Hunger** makes safety cost something. The settings were measured first: 30s of energy
+and 24 pellets was a famine, where starving was the whole game. At 40s and 40 pellets,
+hand-changing only the foraging weights cut starvation from 14 fish to 5 per minute. So
+avoiding it is learnable, and it trades against cohesion.
+
+**Speed.** Scoring is spread over worker threads, with a result that matches the in-thread
+result to the last bit (tested). On this machine (4 physical cores, 8 threads): 48
+evaluations took 34.7s on one worker, 15.0s on 4, 11.7s on 8, so **3.0x**. The last
+missing multiple is the hardware: 4 real cores.
+
+### What was measured: finding #2 came back
+
+The first co-evolution run learned nothing in 12 generations, and neither side moved on
+the scoreboard. The clone diagnostic, the cheapest test in this project, showed why: 48
+children of the champion, scored twice on independent seeds, ranked with a correlation of
+**r = 0.04**. The "best of the generation" was the luckiest of the generation. In a harder
+world with 45 fish and trained sharks, one 45-second trial swings by about 2.9s on luck,
+while real differences between a champion's children are about 0.3s.
+
+Stronger mutation made the differences real (r = 0.40), but the unmutated parent then
+ranked 1st and 2nd of 48. **Nearly every change to a trained champion is a change for the
+worse.** That is what being near a local optimum means, and it is why improvement is slow
+no matter how selection is done.
+
+The fixes: **racing** (re-measure the top 8 on 9 more trials before choosing elites, and cap
+everyone unverified below them) and **36-seed benchmarks** (the old 20-seed bar re-measured
+0.9s lower; it had been set by luck). With both, the next run saved and promoted a new
+champion in its fifth generation.
+
+<!-- V3-RESULTS -->
 
 ## Stage 9, by request — the shark gets a brain (2026-09-21)
 

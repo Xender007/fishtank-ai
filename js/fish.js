@@ -25,6 +25,12 @@ class Fish {
 
     this.alive = true;
 
+    // THE SURVIVAL INSTINCT (CONFIG.hunger). 1 = full, 0 = starved. It drains
+    // with time and only food refills it. With hunger off it stays at 1 and
+    // the energy sense reads a constant.
+    this.energy = 1;
+    this.starved = false;
+
     // Lineage depth. In continuous mode there are no generation boundaries,
     // so this is what 'generation' means: how many ancestors deep this fish
     // is, which keeps climbing while the clock never resets.
@@ -181,5 +187,18 @@ class Fish {
     world.keepInsideTank(this, this.radius());
 
     this.age += dt;
+
+    // Hunger, like the shark's: a clock that only a meal resets. A fish that
+    // hides forever now dies anyway, so safety has a price.
+    if (CONFIG.hunger.enabled) {
+      this.energy -= dt / CONFIG.hunger.starveSeconds;
+      if (this.energy <= 0) {
+        this.energy = 0;
+        this.alive = false;
+        this.starved = true;
+        this.diedAt = world.time;
+        world.fishStarved = (world.fishStarved || 0) + 1;
+      }
+    }
   }
 }

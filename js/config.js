@@ -140,6 +140,91 @@ const CONFIG = {
   },
 
   // --------------------------------------------------------------------------
+  // LEARNED INSTEAD OF WRITTEN (senses layout v3, 2026-09-21)
+  // --------------------------------------------------------------------------
+  // Two parts of the schooling layer used to be rules I wrote by hand. Each can
+  // now be handed to evolution instead. Both are OFF here, like the shark
+  // brain, so every test and benchmark keeps the hand-written measuring stick;
+  // the page and the trainers switch them on (see Profiles in this file).
+  learned: {
+    // TEAMWORK. Off: Schooling.navigate() - my follower slots, cohesion,
+    // separation and wall-margin rules - steers every fish with no threat in
+    // mind. On: the fish's own network steers, reading the social senses
+    // (pack pull, alignment, nearest neighbour, role) added in layout v3. The
+    // packs, the alpha and the alarm relay stay: they are how fish COMMUNICATE.
+    // What they DO with it is now learned.
+    teamwork: false,
+    // PLANNING. Off: the escape planner ranks its imagined routes with my
+    // hand-set formula (2 x clearance + 0.65 x final gap - ...). On: each
+    // genome carries a small evolved critic (Critic, in js/genome.js) that
+    // ranks them.
+    // The planner still imagines the futures; the brain decides which one.
+    planner: false,
+  },
+
+  // --------------------------------------------------------------------------
+  // THE FISH'S SURVIVAL INSTINCT - energy, food, starvation.
+  // --------------------------------------------------------------------------
+  // The shark has had one since it got a brain: no meal in 10s and it dies.
+  // This is the fish's version. Energy drains with time; a food pellet refills
+  // part of it; at zero the fish starves. Hiding in the safest spot forever is
+  // no longer a strategy - a fish has to leave cover to eat.
+  //
+  // Off here (the measuring stick again). Energy still exists as a sense; with
+  // hunger off it reads a constant 1 and there is no food.
+  //
+  // MEASURED before choosing these: 45 fish (the migrated v2 champion with its
+  // teamwork prior), one trained shark (gen 300), 60s, 12 seeds:
+  //
+  //   hunger                  eaten   starved
+  //   off                      16.5      0.0
+  //   30s full, 24 pellets     11.2     31.5    <- famine: starving IS the game
+  //   40s full, 24 pellets     13.8     22.7
+  //   30s full, 40 pellets     14.4     24.3
+  //   40s full, 40 pellets     16.5     14.3    <- chosen
+  //
+  // And is it LEARNABLE, or just a tax? Same setting, only the food-seeking
+  // weights changed by hand: food 0.8 / pack 3 -> 14.3 starved; food 2.5 /
+  // pack 1.5 -> 10.3; food 4 / pack 1 -> 5.2. A brain can cut starvation by
+  // two thirds by trading cohesion for foraging - a real trade-off with a real
+  // gradient, which is exactly what selection needs.
+  hunger: {
+    enabled: false,
+    starveSeconds: 40,     // full to empty, if it never eats
+    startEnergy: 0.7,      // everyone starts 70% full: 28s before the first meal is urgent
+    pelletEnergy: 0.4,     // one pellet refills 40% (16s of life)
+    pellets: 40,           // food in the tank at any moment; an eaten pellet regrows elsewhere
+    pelletRadius: 4,
+    senseRange: 220,       // how far away a fish can smell food
+  },
+
+  // --------------------------------------------------------------------------
+  // TRAINING DEFAULTS for train.js / train-shark.js / coevolve.js.
+  // --------------------------------------------------------------------------
+  training: {
+    // "Bigger population lets bigger networks develop." Speciation shelters a
+    // new neuron inside a species while it tunes, and a species needs members
+    // to exist at all - the NEAT papers use 150. Target species grows with the
+    // population so each still holds ~10 brains.
+    population: 48,
+    brainsPerSpecies: 10,
+    // Train at the size the page shows. The old champion was trained in shoals
+    // of 8 and 12 and then displayed at 45 - an objective mismatch.
+    clones: 45,
+    trials: 3,
+    seconds: 45,
+    sharks: 2,
+    // THE DIFFICULTY LADDER. If the population's mean survival stays above
+    // `raiseAbove` of the cap, add a shark (up to maxSharks); if it falls below
+    // `lowerBelow`, take one away. Findings #4 and #5: a score near the cap
+    // cannot teach, and neither can a massacre. This keeps training in between.
+    raiseAbove: 0.8,
+    lowerBelow: 0.35,
+    maxSharks: 4,
+    sharkPopulation: 32,
+  },
+
+  // --------------------------------------------------------------------------
   // WHAT A FISH CAN PERCEIVE. These become the INPUT NEURONS in Stage 3.
   // --------------------------------------------------------------------------
   senses: {
@@ -601,5 +686,21 @@ const CONFIG = {
     // trials x this many seconds. 60 keeps the wall-clock sane while still
     // leaving ties at the cap rare.
     generationSeconds: 60,
+  },
+};
+
+// -----------------------------------------------------------------------------
+// PROFILES - named sets of switches, applied in one place.
+// -----------------------------------------------------------------------------
+// "v3" is the current environment: learned teamwork, learned planning, fish
+// hunger. The page, train.js, train-shark.js and coevolve.js all apply it, so
+// what is trained is what is shown. Tests do not, so they keep measuring
+// against the hand-written layer that every older number in PLAN.md used.
+const Profiles = {
+  v3(options) {
+    const o = options || {};
+    CONFIG.learned.teamwork = o.teamwork !== false;
+    CONFIG.learned.planner = o.planner !== false;
+    CONFIG.hunger.enabled = o.hunger !== false;
   },
 };

@@ -87,6 +87,21 @@ class World {
     this.ticks = 0;
     this.time = 0;       // seconds elapsed in the current round (display only)
     this.generationTicks = Math.round(CONFIG.sim.generationSeconds / CONFIG.sim.dt);
+
+    // FOOD gets its own random stream, exactly like the plankton decoration
+    // (invariant #4). If pellets drew from world.rng, switching hunger on
+    // would move every fish spawn and no before/after comparison would be
+    // like for like.
+    this.foodRng = new Rng((CONFIG.seed ^ 0x5bd1e995) >>> 0);
+    this.food = [];
+    this.fishStarved = 0;   // across all rounds, like totalKills
+    this.pelletsEaten = 0;
+
+    // Fish-training tanks set this: a starved (brained) shark is replaced as it
+    // is in the page, instead of ending the trial as it does in the SHARK's
+    // training tanks. Otherwise a fish could "win" by outlasting one shark and
+    // then enjoy an empty tank.
+    this.respawnStarvedSharks = false;
     this.spawn();
   }
 
@@ -131,8 +146,42 @@ class World {
     this.shark = this.sharks[0];
     this.nextFishId = 0;
     this.fish.forEach(f => { f.id = this.nextFishId++; });
+    this.spawnFood();
     this.packs = [];
     if (Schooling.active(this)) Schooling.organise(this);
+  }
+
+  // Pellets scattered anywhere in the tank, and fish starting part-fed. Only
+  // when hunger is on: with it off the tank holds no food at all.
+  spawnFood() {
+    this.food = [];
+    if (!CONFIG.hunger.enabled) return;
+    for (const f of this.fish) f.energy = CONFIG.hunger.startEnergy;
+    for (let i = 0; i < CONFIG.hunger.pellets; i++) this.food.push(this.newPellet());
+  }
+
+  newPellet() {
+    const m = 30;
+    return { x: this.foodRng.range(m, this.w - m), y: this.foodRng.range(m, this.h - m) };
+  }
+
+  // A fish that touches a pellet eats it; the pellet regrows somewhere else, so
+  // the amount of food in the tank is constant and only its position changes.
+  resolveFeeding() {
+    if (!this.food.length) return;
+    const cfg = CONFIG.hunger;
+    for (const f of this.fish) {
+      if (!f.alive || f.energy >= 1) continue;     // a full fish swims past food
+      const reach = f.radius() + cfg.pelletRadius, r2 = reach * reach;
+      for (let i = 0; i < this.food.length; i++) {
+        const p = this.food[i];
+        if (V.dist2(f.x, f.y, p.x, p.y) >= r2) continue;
+        f.energy = Math.min(1, f.energy + cfg.pelletEnergy);
+        this.food[i] = this.newPellet();
+        this.pelletsEaten++;
+        break;
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -143,6 +192,7 @@ class World {
     for (const f of this.fish) f.update(dt, this);
     for (const s of this.sharks) s.update(dt, this);
     if (this.sharkBrain) this.handleStarvation();
+    this.resolveFeeding();
     // Packs only change when somebody is eaten. organise() filters, sorts and
     // re-elects an alpha for every pack, and running it unconditionally meant
     // doing all of that TWICE per tick - once here and once inside prepare()
@@ -206,7 +256,7 @@ class World {
       if (s.alive) continue;
       this.sharks.splice(i, 1);
       this.starvations++;
-      if (this.evaluationOnly) continue;
+      if (this.evaluationOnly && !this.respawnStarvedSharks) continue;
       this.sharkCorpses.push({ x: s.x, y: s.y, heading: s.heading, age: s.age,
                                kills: s.kills, diedAt: this.time });
       if (this.sharkCorpses.length > 6) this.sharkCorpses.shift();
@@ -338,6 +388,7 @@ class World {
       );
       child.generation = parent.generation + 1;
       child.id = this.nextFishId++;
+      if (CONFIG.hunger.enabled) child.energy = CONFIG.hunger.startEnergy;
 
       this.fish.push(child);
       this.births++;
@@ -403,7 +454,10 @@ class World {
     // 48.3s of solo survival before, 17.3s after only 12 generations on the
     // page. The page's crowd fitness rewards "do not be the nearest fish",
     // which is not escaping, so watching a champion evolve here un-trains it.
-    if (!evolving && this.mode === "network") {
+    // Also when the brains are merely switched OFF (the page's fish-brain
+    // button, or key b): the population must survive a generation boundary
+    // untouched, or switching back on would find random strangers.
+    if (!evolving) {
       const same = this.fish.map(f => f.net);
       this.generation++;
       this.ticks = 0;

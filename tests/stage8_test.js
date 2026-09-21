@@ -13,12 +13,12 @@ function near(a, b, t) { return Math.abs(a - b) <= (t || 1e-9); }
 // The kin senses ship OFF by default (measured to cost fitness), so this suite
 // switches them on explicitly - it is testing the feature, not the default.
 CONFIG.senses.neighbours = true;
-// rays + wall + speed + closing + three kin senses.
-Senses.COUNT = CONFIG.senses.rayCount + 6;
+// rays + wall + speed + closing + the eleven layout-v3 senses + three kin.
+Senses.COUNT = CONFIG.senses.rayCount + 3 + 11 + 3;
 console.log('');
 
 // --- 1. the sense layout grew by exactly three ------------------------------
-check('the kin senses add exactly three slots', Senses.COUNT === CONFIG.senses.rayCount + 6,
+check('the kin senses add exactly three slots', Senses.COUNT === Senses.KIN + 3,
       Senses.COUNT + ' senses: ' + Senses.labels().join(', '));
 check('labels and slots stay in step', Senses.labels().length === Senses.COUNT);
 

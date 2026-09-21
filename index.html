@@ -22,6 +22,7 @@
       <span>gen <b id="gen">1</b></span>
       <span>alive <b><i id="alive">0</i><small>/<i id="total">0</i></small></b></span>
       <span>eaten <b id="eaten">0</b></span>
+      <span>starved <b id="starved">0</b></span>
       <span>births <b id="births">0</b></span>
       <span class="minor">young <b id="young">0</b></span>
       <span>time <b><i id="time">0.0</i><small>s</small></b></span>
@@ -50,6 +51,9 @@
           <dt>1 2 3 4</dt><dd>speed 1&times; 5&times; 20&times; 100&times;</dd>
           <dt>n</dt><dd>step the forward pass</dd>
           <dt>k</dt><dd>shark brain on / off</dd>
+          <dt>t</dt><dd>teamwork: learned / written rules</dd>
+          <dt>p</dt><dd>planner: evolved critic / hand formula</dd>
+          <dt>h</dt><dd>hunger on / off</dd>
           <dt>e</dt><dd>evolution on / off</dd>
           <dt>g</dt><dd>breed now</dd>
           <dt>v</dt><dd>all rays</dd>
@@ -158,6 +162,9 @@
         <h2 id="h-train">Improve the fish brain</h2>
       </header>
       <div id="evolvebar">
+        <button id="btn-fish-brain" class="toggle on">FISH BRAIN: ON</button>
+        <label class="field-label" for="fish-gen">fish brain generation</label>
+        <select id="fish-gen"></select>
         <button id="btn-evolve" class="toggle">auto-improve: OFF</button>
         <button id="btn-warm" class="toggle on">generation 1: champion</button>
         <button id="btn-life" class="toggle">TIMER: generations reset on a clock</button>
@@ -237,6 +244,8 @@
   <script src="champions/best.js"></script>
   <!-- Written by train-shark.js: one shark brain per trained generation. -->
   <script src="champions/shark-best.js"></script>
+  <!-- Written by train.js: one fish champion per trained generation. -->
+  <script src="champions/fish-history.js"></script>
   <script src="js/main.js"></script>
 
 </body>

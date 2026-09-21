@@ -41,6 +41,30 @@ class TrainingStore {
     this.write('best.js', '// Best validated display brain. Written by train.js.\nwindow.CHAMPION = ' +
       JSON.stringify(data, null, 2) + ';\n');
   }
+  // ---------------------------------------------------------------------------
+  // FISH HISTORY - one champion per trained generation, for the page's
+  // "fish brain generation" dropdown. Also written as a script, because a
+  // file:// page can load a script but cannot fetch() a JSON file.
+  // Kept selectable: every entry while short, then the first, every k-th and
+  // the newest 20 (the same thinning as the shark's list).
+  // ---------------------------------------------------------------------------
+  fishHistory(entries) {
+    const byGen = new Map();
+    for (const e of (this.read('fish-history.json') || { generations: [] }).generations) byGen.set(e.generation, e);
+    for (const e of entries) byGen.set(e.generation, e);
+    let all = [...byGen.values()].sort((a, b) => a.generation - b.generation);
+    const max = 80;
+    if (all.length > max) {
+      const recent = all.slice(-20), older = all.slice(0, -20);
+      const k = Math.ceil(older.length / (max - 20));
+      all = older.filter((e, i) => i % k === 0).concat(recent);
+    }
+    const data = { version: 1, saved: new Date().toISOString(), generations: all };
+    this.write('fish-history.json', JSON.stringify(data));
+    this.write('fish-history.js', '// Fish brains, one champion per trained generation. Written by train.js.\n' +
+      'window.FISH_HISTORY = ' + JSON.stringify(data) + ';\n');
+    return all.length;
+  }
   progress(row) {
     // Do not silently discard unreadable history: retaining learned data is
     // more important than pretending a corrupted file was an empty history.

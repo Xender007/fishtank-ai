@@ -28,9 +28,11 @@ const Persist = {
         nodes: brain.nodes.map(n => ({ id: n.id, type: n.type, bias: n.bias })),
         conns: brain.conns.map(c => ({ inn: c.inn, from: c.from, to: c.to,
                                        recurrent: !!c.recurrent,
-                               plasticity: c.plasticity || 0,
                                        plasticity: c.plasticity || 0,
                                        w: c.w, enabled: c.enabled })),
+        // The evolved planner critic, when the brain has one. Older files have
+        // none and load with the hand-written ranking, which is what they ran.
+        critic: brain.critic ? brain.critic.toJSON() : undefined,
       });
     }
 
@@ -60,17 +62,25 @@ const Persist = {
         throw new Error('genome file is missing nodes or conns');
       }
       const inputs = data.nodes.filter(n => n.type === NODE_INPUT).length;
+      // Layout v3 only APPENDED senses, so a v2 brain is carried over rather
+      // than refused. See Genome.migrateLegacy.
+      if (inputs === Senses.LEGACY_V2_COUNT && inputs !== Senses.COUNT) return Genome.migrateLegacy(data);
       if (inputs !== Senses.COUNT) {
         throw new Error('that brain expects ' + inputs + ' senses, this fish has ' +
                         Senses.COUNT + ' - the sense layout has changed since it was saved');
       }
       const g = new Genome(
         data.nodes.map(n => ({ id: n.id, type: n.type, bias: n.bias })),
+        // plasticity WAS dropped here until 2026-09-21: every champion loaded
+        // from disk ran with its evolved learning rates silently zeroed, so it
+        // was not quite the brain that had been benchmarked in training.
         data.conns.map(c => ({ inn: c.inn, from: c.from, to: c.to,
                                recurrent: !!c.recurrent,
+                               plasticity: Number.isFinite(c.plasticity) ? c.plasticity : 0,
                                w: c.w, enabled: c.enabled !== false }))
       );
       g.hue = typeof data.hue === 'number' ? data.hue : 200;
+      g.critic = data.critic ? Critic.fromJSON(data.critic) : Critic.hand();
       return g;
     }
 

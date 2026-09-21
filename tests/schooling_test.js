@@ -151,6 +151,12 @@ check('pack rendering never changes simulation state', before === JSON.stringify
   [f.x, f.y, f.heading, f.alive, f.packId, f.isAlpha, f.alarm])));
 CONFIG.schooling.enabled = false;
 const f = r1.world.fish.find(f => f.alive);
-const neural = f.net.decide(f.senses), decision = f.think(r1.world);
+// Every forward pass now also takes a Hebbian step (plasticity loads from disk
+// since 2026-09-21), so calling the network twice is not a pure repeat. Put its
+// state back between the two calls, so both see the same brain.
+const state = [f.net.values.slice(), f.net.prev.slice(), f.net.traces.slice()];
+const neural = f.net.decide(f.senses);
+f.net.values.set(state[0]); f.net.prev.set(state[1]); f.net.traces.set(state[2]);
+const decision = f.think(r1.world);
 check('disabling schooling restores the exact learned neural output', neural.turn === decision.turn && neural.thrust === decision.thrust);
 `, { console, process, champion });

@@ -92,8 +92,68 @@ const Schooling = {
       f.alarm = threat ? V.clamp(1 - (now - threat.seenAt) / cfg.memorySeconds, 0, 1) : 0;
       f.socialDecision = null;
     }
+    this.measureSocial(world, live);
     // Compute everyone's navigation from the same positions and headings.
-    for (const f of live) f.socialDecision = this.navigate(f, world);
+    // With learned teamwork the network steers instead (see decide()); the
+    // written rules then run only for PARENTING in continuous life - juveniles
+    // sheltering and adults screening them - because training never contains
+    // a juvenile, so there is nothing to learn that behaviour from.
+    const learned = CONFIG.learned.teamwork;
+    for (const f of live) {
+      if (!learned) { f.socialDecision = this.navigate(f, world); continue; }
+      f.socialDecision = null;
+      if (CONFIG.life.continuous) {
+        const rule = this.navigate(f, world);
+        if (f.escorting !== null && f.escorting !== undefined || f.maturity() < 1) f.socialDecision = rule;
+      }
+      if (!f.socialDecision) {
+        f.escorting = null;
+        f.behaviour = f.isAlpha ? 'scouting' : f.social.packDistance > 100 ? 'regrouping' : 'schooling';
+      }
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // THE TEAM, MEASURED ONCE PER TICK (layout-v3 senses).
+  // ---------------------------------------------------------------------------
+  // For every fish: where its pack's centre is, which way its packmates are
+  // heading on average, and where its nearest neighbour is. All from the same
+  // snapshot, before anybody moves, so the answer never depends on the order
+  // fish happen to be stored in. Senses.readSocial() copies these into the
+  // network's inputs.
+  // ---------------------------------------------------------------------------
+  measureSocial(world, live) {
+    for (const p of world.packs) {
+      let c = 0, s = 0;
+      for (const m of p.members) { c += Math.cos(m.heading); s += Math.sin(m.heading); }
+      p.headingCos = c; p.headingSin = s;
+    }
+    for (const f of live) {
+      const soc = f.social || (f.social = {});
+      const p = f.pack;
+      const pd = p ? V.dist(f.x, f.y, p.x, p.y) : 0;
+      soc.packDistance = pd;
+      soc.packPull = p && pd > 1e-6
+        ? V.angleDiff(V.angleTo(f.x, f.y, p.x, p.y), f.heading) / Math.PI * V.clamp(pd / 100, 0, 1) : 0;
+      soc.packFar = V.clamp(pd / 150, 0, 1);
+      let align = 0;
+      if (p && p.members.length > 1) {
+        const c = p.headingCos - Math.cos(f.heading), s = p.headingSin - Math.sin(f.heading);
+        if (c * c + s * s > 1e-12) align = V.angleDiff(Math.atan2(s, c), f.heading) / Math.PI;
+      }
+      soc.align = align;
+      let nearest = Infinity, other = null;
+      for (const o of live) {
+        if (o === f) continue;
+        const d2 = V.dist2(f.x, f.y, o.x, o.y);
+        if (d2 < nearest) { nearest = d2; other = o; }
+      }
+      const reach = CONFIG.schooling.spacing * 2;
+      const closeness = other ? V.clamp(1 - Math.sqrt(nearest) / reach, 0, 1) : 0;
+      soc.crowded = closeness;
+      soc.neighbour = other && closeness > 0
+        ? V.angleDiff(V.angleTo(f.x, f.y, other.x, other.y), f.heading) / Math.PI * closeness : 0;
+    }
   },
 
   navigate(f, world) {
@@ -190,14 +250,18 @@ const Schooling = {
   },
 
   decide(f, world, neural) {
-    if (!this.active(world) || !f.socialDecision) return neural;
+    if (!this.active(world)) return neural;
+    // In calm water the fish is steered by my pack rules, or - with learned
+    // teamwork - by its own network, which is then simply the neural output.
+    const calm = f.socialDecision || (CONFIG.learned.teamwork ? neural : null);
+    if (!calm) return neural;
     const t = f.threat, cfg = CONFIG.schooling;
-    if (!t) { f.escapeDecision = null; f.escapePlan = null; return f.socialDecision; }
+    if (!t) { f.escapeDecision = null; f.escapePlan = null; return calm; }
     const elapsed = Math.min(world.time - t.seenAt, 0.6);
     const sx = V.clamp(t.x + Math.cos(t.heading) * t.speed * elapsed, 16, world.w - 16);
     const sy = V.clamp(t.y + Math.sin(t.heading) * t.speed * elapsed, 16, world.h - 16);
     const distance = V.dist(f.x, f.y, sx, sy);
-    if (distance > cfg.scoutRange + 40) { f.escapePlan = null; return f.socialDecision; }
+    if (distance > cfg.scoutRange + 40) { f.escapePlan = null; return calm; }
     f.behaviour = f.directThreat ? 'evading' : 'following alarm';
     // How often THIS fish re-plans. In a small school that is planEvery; in a
     // large one it stretches so the total planning work per tick stays inside
@@ -209,7 +273,11 @@ const Schooling = {
     // Search complete manoeuvres: dodge (optionally braking) THEN exit. Apply
     // only the first action and replan from new observations. A fish can now
     // discover a hook turn or an S-shaped escape, rather than holding a circle.
-    const choices = [-1, -0.5, 0, 0.5, 1, neural.turn, f.socialDecision.turn];
+    const choices = [-1, -0.5, 0, 0.5, 1, neural.turn, calm.turn];
+    // Which ranking: my formula, or the critic this fish's genome evolved.
+    const critic = CONFIG.learned.planner && f.net && f.net.critic ? f.net.critic : null;
+    const feat = critic ? (f._criticScratch || (f._criticScratch = new Float64Array(Critic.FEATURES.length))) : null;
+    const urgency = V.clamp(1 - distance / 300, 0, 1);
     // Reuse one scratch trajectory. Only a winning candidate is copied for
     // the inspector; the renderer never computes or changes fish decisions.
     const pathLength = (cfg.routeSteps + 1) * 2;
@@ -217,9 +285,19 @@ const Schooling = {
     const path = f._routeScratch;
     path[0] = f.x; path[1] = f.y;
     let best = -Infinity, decision = neural;
-    for (const turn of choices) {
-      const speeds = distance < 150 && Math.abs(turn) > 0.6 ? [1, 0.6] : [1];
-      for (const thrust of speeds) for (const exitTurn of [turn, 0, -turn]) {
+    const sharkStep = CONFIG.shark.turnRate * cfg.predictionDt;   // the forecast shark's turn limit per step
+    for (let c = 0; c < choices.length; c++) {
+      const turn = choices[c];
+      // With learned teamwork the calm-water turn IS the reflex turn, so the
+      // last candidate would repeat the one before it. A repeat can never win
+      // (only a strictly better score replaces the best), so skipping it
+      // changes no decision and saves a seventh of the search.
+      if (c === choices.length - 1 && turn === choices[c - 1]) continue;
+      const braking = distance < 150 && Math.abs(turn) > 0.6;
+      for (let sp = 0; sp < (braking ? 2 : 1); sp++) for (let ex = 0; ex < 3; ex++) {
+        const thrust = sp === 0 ? 1 : 0.6;
+        const exitTurn = ex === 0 ? turn : ex === 1 ? 0 : -turn;
+        const step = sharkStep;
         let x = f.x, y = f.y, heading = f.heading;
         let px = sx, py = sy, ph = t.heading, minGap = Infinity, wallCost = 0;
         for (let i = 0; i < cfg.routeSteps; i++) {
@@ -235,20 +313,35 @@ const Schooling = {
           y = V.clamp(y, CONFIG.fish.radius, world.h - CONFIG.fish.radius);
           path[(i + 1) * 2] = x;
           path[(i + 1) * 2 + 1] = y;
-          const step = CONFIG.shark.turnRate * cfg.predictionDt;
           ph += V.clamp(V.angleDiff(V.angleTo(px, py, x, y), ph), -step, step);
           px = V.clamp(px + Math.cos(ph) * t.speed * cfg.predictionDt, 16, world.w - 16);
           py = V.clamp(py + Math.sin(ph) * t.speed * cfg.predictionDt, 16, world.h - 16);
           // Swept separation catches collisions BETWEEN forecast samples.
           const rx = x - px - ox, ry = y - py - oy;
           const fraction = V.clamp(-(ox * rx + oy * ry) / (rx * rx + ry * ry || 1), 0, 1);
-          minGap = Math.min(minGap, Math.hypot(ox + fraction * rx, oy + fraction * ry));
+          // sqrt, not Math.hypot: hypot guards against overflow this never needs
+          // and is several times slower in V8. MEASURED: 15-20% off a whole
+          // 45-fish evaluation, since this line runs for every forecast step of
+          // every candidate route.
+          const gx = ox + fraction * rx, gy = oy + fraction * ry;
+          minGap = Math.min(minGap, Math.sqrt(gx * gx + gy * gy));
         }
         const gap = V.dist(x, y, px, py);
         const collision = Math.max(0, CONFIG.shark.radius + CONFIG.fish.radius + 10 - minGap);
         const cohesion = distance > 150 ? V.dist(x, y, f.pack.x, f.pack.y) * 0.06 : 0;
-        const score = minGap * 2 + gap * 0.65 - collision * 18 - wallCost - cohesion -
-          Math.abs(turn - neural.turn) * 1.5 - Math.abs(turn - f.lastTurn) * 3;
+        let score;
+        if (critic) {
+          // Raw features, in Critic.FEATURES order. The cohesion slot holds the
+          // DISTANCE (the hand formula's 0.06 is the critic's weight on it).
+          feat[0] = minGap; feat[1] = gap; feat[2] = collision; feat[3] = wallCost;
+          feat[4] = distance > 150 ? V.dist(x, y, f.pack.x, f.pack.y) : 0;
+          feat[5] = Math.abs(turn - neural.turn); feat[6] = Math.abs(turn - f.lastTurn);
+          feat[7] = thrust < 1 ? 1 : 0; feat[8] = urgency;
+          score = critic.score(feat);
+        } else {
+          score = minGap * 2 + gap * 0.65 - collision * 18 - wallCost - cohesion -
+            Math.abs(turn - neural.turn) * 1.5 - Math.abs(turn - f.lastTurn) * 3;
+        }
         if (score > best) {
           best = score; decision = { turn, thrust };
           f.escapePlan = {

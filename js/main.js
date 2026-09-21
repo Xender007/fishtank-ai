@@ -54,7 +54,8 @@ function fitCanvas(cv, ctx, w, h, displayW, maxPixels) {
 const VIEW_SIZE = {
   sea:   { w: CONFIG.tank.w, h: CONFIG.tank.h },
   chart: { w: CONFIG.tank.w, h: 236 },
-  brain: { w: 408, h: 452 },
+  // Taller since layout v3: 23 input neurons need ~23px each to stay legible.
+  brain: { w: 408, h: 580 },
   sharkBrain: { w: 470, h: 430 },
 };
 
@@ -138,6 +139,12 @@ chartCanvas.addEventListener('mousemove', (e) => {
 });
 chartCanvas.addEventListener('mouseleave', () => { Chart.hover = null; });
 
+// The page runs the CURRENT environment (layout v3): learned teamwork, the
+// evolved planner critic, and fish hunger - exactly what train.js and
+// coevolve.js train in. The tests leave all three off, keeping the written
+// rules as their measuring stick. Keys t, p and h switch each one back to
+// compare, live.
+Profiles.v3();
 const world = new World();
 
 // -----------------------------------------------------------------------------
@@ -280,6 +287,7 @@ function frame(now) {
   if (world.generation !== lastGeneration) {
     lastGeneration = world.generation;
     Persist.autosave(world);
+    recordPageGeneration();
   }
   // ---------------------------------------------------------------------------
   // DRAWING IS FENCED OFF FROM THE SIMULATION.
@@ -392,8 +400,11 @@ function buildSensePanel() {
     track.className = 'sense-track';
     val.className = 'sense-val';
     // Colour-coded by what the sense IS: vision red, wall amber, speed teal.
+    // Layout v3 adds the team (violet) and the body's needs (green).
     bar.className = 'sense-bar ' +
-      (i === Senses.WALL ? 'is-wall' : i === Senses.SPEED ? 'is-speed' : 'is-ray');
+      (i === Senses.WALL ? 'is-wall' : i === Senses.SPEED ? 'is-speed'
+        : i >= Senses.ENERGY && i <= Senses.FOOD_NEAR ? 'is-food'
+        : i >= Senses.PACK_PULL && i <= Senses.ALARM ? 'is-team' : 'is-ray');
 
     name.textContent = label;
     val.textContent = '0.00';
@@ -419,14 +430,19 @@ function updateSensePanel() {
       (f.threat ? ' · sighting ' + Math.max(0, world.time - f.threat.seenAt).toFixed(2) + 's old'
                 : ' · no known threat')
     : '';
+  const critic = CONFIG.learned.planner && f && f.net && f.net.critic;
   document.getElementById('plan-note').textContent = f && social && f.escapePlan
-    ? f.escapePlan.manoeuvre + ' · ' + f.escapePlan.seconds.toFixed(2) + 's planned ahead'
+    ? f.escapePlan.manoeuvre + ' · ' + f.escapePlan.seconds.toFixed(2) + 's planned ahead · chosen by ' +
+      (critic ? (critic.isHand() ? 'its critic (still at the hand-written values)' : 'its evolved critic')
+              : 'the hand-written ranking')
     : '';
   document.getElementById('social-note').textContent = f && social && f.pack
     ? 'Pack ' + f.packId + ' · ' + f.pack.members.length + ' fish · ' +
       (f.isAlpha ? 'alpha scout' : 'follower') +
       (f.threat ? ' · alarm ' + Math.round(f.alarm * 100) + '%' : '') +
-      ' · turn ' + f.lastTurn.toFixed(2) + ' · thrust ' + f.lastThrust.toFixed(2)
+      ' · turn ' + f.lastTurn.toFixed(2) + ' · thrust ' + f.lastThrust.toFixed(2) +
+      ' · steered by ' + (f.socialDecision ? 'written pack rules' : 'its own network') +
+      (CONFIG.hunger.enabled ? ' · energy ' + Math.round(100 * f.energy) + '%' : '')
     : '';
   document.getElementById('focus-note').textContent =
     !f ? 'no fish alive'
@@ -435,7 +451,10 @@ function updateSensePanel() {
 
   for (let i = 0; i < senseRows.length; i++) {
     const v = f ? f.senses[i] : 0;
-    senseRows[i].bar.style.width = (v * 100).toFixed(1) + '%';
+    // Direction senses are signed (-1..1). The bar shows the size; a negative
+    // one is drawn from the right so the sign is visible at a glance.
+    senseRows[i].bar.style.width = (Math.min(1, Math.abs(v)) * 100).toFixed(1) + '%';
+    senseRows[i].bar.classList.toggle('neg', v < 0);
     senseRows[i].val.textContent = v.toFixed(2);
     // Most senses sit at zero most of the time. Dimming them is what makes
     // the one or two carrying signal findable at a glance.
@@ -683,6 +702,7 @@ function updateHud() {
   set('young', young);
   set('births', world.births || 0);
   set('eaten', world.totalKills);
+  set('starved', CONFIG.hunger.enabled ? world.fishStarved || 0 : 'off');
   set('shoal', Evolution.shoaling(world.fish).toFixed(0) + 'px');
   set('diversity', Evolution.geneticSpread(world.fish).toFixed(3));
 
@@ -727,12 +747,26 @@ window.addEventListener('keydown', (e) => {
     syncEvolveButtons();
   }
   if (e.code === 'KeyK') toggleSharkBrain();
+  // Learned vs written, live. Each switch changes the simulation (so it lives
+  // in CONFIG, not in view state) and takes effect on the next tick.
+  if (e.code === 'KeyT') {
+    CONFIG.learned.teamwork = !CONFIG.learned.teamwork;
+    flash(CONFIG.learned.teamwork ? 'teamwork: LEARNED · each fish’s network steers it in calm water'
+                                  : 'teamwork: WRITTEN RULES · follower slots, cohesion, separation');
+  }
+  if (e.code === 'KeyP') {
+    CONFIG.learned.planner = !CONFIG.learned.planner;
+    flash(CONFIG.learned.planner ? 'escape planner: routes ranked by each fish’s evolved critic'
+                                 : 'escape planner: routes ranked by the hand-written formula');
+  }
+  if (e.code === 'KeyH') toggleHunger();
   if (e.code === 'KeyL') {
     view.showLineage = !view.showLineage;
   }
   // Cycle the three brains and compare them against each other.
   if (e.code === 'KeyB') {
     world.mode = MODES[(MODES.indexOf(world.mode) + 1) % MODES.length];
+    syncFishBrainButton();
   }
   // Fast-forward. Evolution needs a great deal of simulated time; because the
   // timestep is fixed, 100x produces exactly the run you would have watched at
@@ -758,6 +792,23 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyR') location.reload();
 });
 
+
+// Hunger on: scatter food and start the clock from where each fish is now.
+// Off: clear the food, top everyone up, and nobody starves.
+function toggleHunger() {
+  CONFIG.hunger.enabled = !CONFIG.hunger.enabled;
+  if (CONFIG.hunger.enabled) {
+    world.food = [];
+    for (let i = 0; i < CONFIG.hunger.pellets; i++) world.food.push(world.newPellet());
+  } else {
+    world.food = [];
+    for (const f of world.fish) f.energy = 1;
+  }
+  flash(CONFIG.hunger.enabled
+    ? 'hunger ON · a fish lasts ' + CONFIG.hunger.starveSeconds + 's without food; each pellet is ' +
+      Math.round(100 * CONFIG.hunger.pelletEnergy) + '% of a meal'
+    : 'hunger OFF · no food, nobody starves');
+}
 
 // -----------------------------------------------------------------------------
 // SAVING AND LOADING BRAINS (Stage 8)
@@ -947,6 +998,7 @@ document.getElementById('btn-restart').addEventListener('click', () => {
   // something to choose between. A cold start builds minimal brains.
   world.seedFrom(champ || World.newBrain(world.rng), true);
   CONFIG.evolution.enabled = true;
+  fishState.run++;
   view.pinned = null;
   view.selectedNode = null;
   syncEvolveButtons();
@@ -957,6 +1009,9 @@ document.getElementById('btn-restart').addEventListener('click', () => {
 
 document.getElementById('btn-champion').addEventListener('click', () => {
   if (!loadChampion(true)) flash('no champions/best.js \u2014 run: node train.js');
+  fishState.selected = 'champion';
+  fishState.run++;
+  rebuildFishSelect();
   syncEvolveButtons();
 });
 
@@ -1080,6 +1135,109 @@ function ensureSharkTrainer() {
   return sharkState.trainer;
 }
 
+// -----------------------------------------------------------------------------
+// FISH BRAIN GENERATIONS - pick which fish brain fills the tank.
+// -----------------------------------------------------------------------------
+// Three sources, newest first in the list:
+//   - "champion": champions/best.js, the brain train.js validated for the page;
+//   - every generation train.js recorded (champions/fish-history.js);
+//   - every generation auto-trained in THIS browser (kept in localStorage).
+// Brains are parsed only when chosen: a v2 brain is migrated on load, and
+// there is no reason to do that for sixty brains nobody picked.
+// -----------------------------------------------------------------------------
+const FISH_KEY = 'fish-page-history-v3';
+const fishState = { selected: 'champion', offline: [], page: [], run: 1 };
+
+function loadFishHistory() {
+  const file = typeof window.FISH_HISTORY !== 'undefined' ? window.FISH_HISTORY : null;
+  fishState.offline = ((file && file.generations) || []).map(e => ({
+    key: 'train-' + e.generation, data: e.brain,
+    // A layout-v2 score was measured in the old world (no hunger, brainless
+    // shark), so printing it beside today's numbers would mislead.
+    label: 'gen ' + e.generation + ' · trained offline' + (/v2/.test(e.regime || '')
+      ? ' · old layout, score not comparable'
+      : e.page ? ' · page score ' + e.page.toFixed(1) + 's' : e.score ? ' · held-out ' + e.score.toFixed(1) + 's' : ''),
+  }));
+  try {
+    const raw = localStorage.getItem(FISH_KEY);
+    if (raw) fishState.page = JSON.parse(raw);
+    fishState.run = fishState.page.reduce((m, e) => Math.max(m, (e.run || 0) + 1), 1);
+  } catch (err) { fishState.page = []; }
+}
+
+// A generation just finished while auto-training: keep its best brain.
+function recordPageGeneration() {
+  if (!CONFIG.evolution.enabled || !world.bestBrain || CONFIG.life.continuous) return;
+  const gen = world.generation - 1;
+  fishState.page.push({ key: 'page-' + fishState.run + '-' + gen, run: fishState.run, generation: gen,
+    label: 'this page · run ' + fishState.run + ' · gen ' + gen + ' · best ' + world.bestFitness.toFixed(1) + 's',
+    data: Persist.toJSON(world.bestBrain, { generation: gen, fitness: world.bestFitness }) });
+  if (fishState.page.length > 60) fishState.page.splice(0, fishState.page.length - 60);
+  try { localStorage.setItem(FISH_KEY, JSON.stringify(fishState.page)); }
+  catch (err) { /* storage unavailable - the list still works this session */ }
+  rebuildFishSelect();
+}
+
+function rebuildFishSelect() {
+  const sel = document.getElementById('fish-gen');
+  const opts = ['<option value="champion">trained champion (best.js)</option>'];
+  for (let i = fishState.page.length - 1; i >= 0; i--) {
+    opts.push('<option value="' + fishState.page[i].key + '">' + fishState.page[i].label + '</option>');
+  }
+  for (let i = fishState.offline.length - 1; i >= 0; i--) {
+    opts.push('<option value="' + fishState.offline[i].key + '">' + fishState.offline[i].label + '</option>');
+  }
+  sel.innerHTML = opts.join('');
+  sel.value = fishState.selected;
+  if (sel.value === '') { fishState.selected = 'champion'; sel.value = 'champion'; }
+}
+
+function selectedFishBrain() {
+  if (fishState.selected === 'champion') return championBrain();
+  const e = fishState.page.concat(fishState.offline).find(x => x.key === fishState.selected);
+  return e ? Persist.fromJSON(e.data) : null;
+}
+
+// -----------------------------------------------------------------------------
+// FISH BRAIN ON / OFF - the fish's version of the shark-brain switch.
+// -----------------------------------------------------------------------------
+// Off is Stage 0's drunkard: each fish drifts on random turns. No network, and
+// because Schooling only runs in "network" mode, no packs, alarms or escape
+// planning either - a genuinely brainless fish, the "before" picture every
+// trained brain is measured against. The brains are kept, not deleted: switch
+// back on and the same fish think again. (Key b also cycles the Stage 2 neuron.)
+function syncFishBrainButton() {
+  const b = document.getElementById('btn-fish-brain');
+  const on = world.mode === 'network';
+  b.textContent = on ? 'FISH BRAIN: ON' : world.mode === 'neuron'
+    ? 'FISH BRAIN: hand-wired neuron (Stage 2)' : 'FISH BRAIN: OFF (random drift)';
+  b.classList.toggle('on', on);
+}
+
+document.getElementById('btn-fish-brain').addEventListener('click', () => {
+  world.mode = world.mode === 'network' ? 'wander' : 'network';
+  syncFishBrainButton();
+  flash(world.mode === 'network'
+    ? 'fish brain ON · the trained networks steer again, with packs, alarms and escape planning'
+    : 'fish brain OFF · random drift: no network, no packs, no alarms, no planning');
+});
+
+document.getElementById('fish-gen').addEventListener('change', (e) => {
+  fishState.selected = e.target.value;
+  let brain = null;
+  try { brain = selectedFishBrain(); } catch (err) { flash('could not load that brain: ' + err.message); return; }
+  if (!brain) { flash('that brain is no longer available'); return; }
+  // Auto-train on: the chosen brain becomes the ancestor of a new run (one
+  // exact copy + mutated children). Off: every fish is an exact copy.
+  world.seedFrom(brain, CONFIG.evolution.enabled);
+  fishState.run++;
+  view.pinned = null;
+  view.selectedNode = null;
+  syncEvolveButtons();
+  flash('fish brain: ' + e.target.selectedOptions[0].textContent + ' · ' + brain.paramCount() + ' params' +
+        (CONFIG.evolution.enabled ? ' · auto-training from here' : ' · exact copies, not training'));
+});
+
 function onSharkGeneration(record) {
   sharkState.history.push(record);
   if (sharkState.history.length > 400) sharkState.history = SharkHistory.thin(sharkState.history, 300);
@@ -1191,7 +1349,20 @@ function updateSharkPanel() {
 
 fitAllCanvases();
 buildSensePanel();
-loadChampion(false);
+// AUTO-TRAIN IS ON BY DEFAULT (by request, 2026-09-22). The tank starts from
+// the trained champion plus mutated children and keeps breeding; every
+// generation's best brain lands in the "fish brain generation" dropdown, so
+// any earlier brain - including the untouched champion - is one click away.
+// (History: in-page evolution once cut a champion from 48.3s to 17.3s under
+// raw crowd fitness; Evolution.fitness() has weighted by exposure since.)
+{
+  const champ = championBrain();
+  world.seedFrom(champ || World.newBrain(world.rng), true);
+  CONFIG.evolution.enabled = true;
+}
+loadFishHistory();
+rebuildFishSelect();
+syncFishBrainButton();
 syncEvolveButtons();
 loadSharkHistory();
 rebuildSharkSelect();

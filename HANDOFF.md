@@ -8,9 +8,111 @@ AI/maths and wants to understand, not just run, what is here. That shapes everyt
 the code is heavily commented with *why*, decisions are measured rather than assumed, and
 several deliberate wrong turns are preserved because the failure taught more than the fix.
 
-**Status:** working. Fish champion unchanged; the shark now has an optional brain; 192 tests passing.
+**Status:** working. Layout v3 (learned teamwork, learned planning, fish hunger), multi-core
+co-evolution; 221 tests passing. See the section directly below first.
 
-## Current update: the shark has a brain (2026-09-21, by explicit request)
+## Current update: layout v3 + co-evolution (2026-09-21, eight requested changes)
+
+| # | request | where |
+|---|---|---|
+| 1 | fish train against the TRAINED shark | `train.js` (opponent = newest shark + one hall-of-fame shark), `coevolve.js` alternates both sides |
+| 2 | learned teamwork | `Schooling.measureSocial` + 6 social senses; `CONFIG.learned.teamwork` hands calm-water steering to the network |
+| 3 | train at 45 fish | `CONFIG.training.clones = 45` (train.js default) |
+| 4 | harder training | 2 trained sharks, hunger, a difficulty ladder (adds a shark above 80% survival, removes below 35%) |
+| 5 | bigger population | 48 (was 16); target species = pop / 10 |
+| 6 | plan with the brain | `Critic` in `js/genome.js`: an evolved route-ranker per genome; `CONFIG.learned.planner` |
+| 7 | fish survival instinct | `CONFIG.hunger`: energy drains in 40s, 40 food pellets, starvation |
+| 8 | all CPU cores | `parallel.js` worker pool + `evaluation.js`; 3.0x on this 4-core/8-thread i5 |
+
+**The measuring stick is still preserved.** `learned.teamwork`, `learned.planner` and
+`hunger.enabled` are all `false` in `config.js`. `Profiles.v3()` switches them on, and only
+the page, `train.js`, `train-shark.js` and `coevolve.js` call it. Every older test runs
+against the written rules exactly as before.
+
+**Layout v3 = 23 inputs.** The old 12 inputs are unchanged, and 11 are appended: pack pull,
+pack far, align, neighbour, crowded, is alpha, alarm dir, alarm, energy, food dir, food near.
+Because v3 only appends, **a v2 (12-input) brain is MIGRATED, not refused**
+(`Genome.migrateLegacy`). Its new inputs are wired with `Genome.TEAM_PRIOR`, a rough
+translation of the old pack rules into weights. That prior is only where learning starts
+(`train.js --no-prior` is the zero-weight control). Pruning keeps v2 files for this reason.
+
+**The critic reproduces the hand planner bit for bit** when it is at its initial values:
+same floating-point operations in the same order (tested over 20s with 45 fish). Its
+linear weights mutate multiplicatively, because they span -18 to 0.06. It only mutates
+while `learned.planner` is on, so older seeded experiments consume the same random numbers.
+
+**Bug found and fixed: `Persist.fromJSON` dropped evolved plasticity.** Every champion loaded
+from disk ran with its Hebbian learning rates zeroed, so it was not the brain training had
+benchmarked. Worker threads receive brains as JSON, so this also had to be fixed for
+parallel scores to be identical. The page champion therefore behaves slightly differently
+from before this date.
+
+**Parenting is still written.** In continuous-life mode the juvenile-shelter and escort rules
+still run even with learned teamwork, because training never contains a juvenile, so
+there is nothing to learn it from.
+
+### Finding #12: in the v3 world, selection was reading luck again (finding #2, reborn)
+
+The first co-evolution run (3 trials, no racing) improved nothing in 12 generations, and
+the scoreboard did not move for either side. Clone diagnostic
+(`tests/results/selection-noise-20260921.txt`):
+
+| 48 children of the champion, scored twice on independent seeds | spread | rank correlation |
+|---|---:|---:|
+| 3 trials, 3 sharks (the training setting) | 1.11s | **r = 0.04** |
+| 8 trials, 2 sharks | 0.91s | r = 0.20 |
+| 8 trials, 2 sharks, 3x stronger mutation | 1.17s | r = 0.40, but the parent ranks 1st and 2nd |
+
+One brain re-scored on 48 seed sets moves by sd 1.66s; the true differences between its
+children are about 0.3s. Stronger mutation makes real differences, but almost all of them
+are for the worse: **the champion sits near a local optimum.** Two fixes:
+
+- **Racing** (`--race 8 --race-trials 9`): the top 8 get 9 more trials on fresh shared seeds
+  before the champion and elites are chosen, and no unverified brain may outrank a
+  verified finalist. It costs 1.5x per generation, not the 4x of 12 trials for everyone.
+- **36-seed held-out benchmarks** (were 20 and 12). A ratchet whose bar is set by a lucky
+  reading blocks every later brain. On 36 seeds the "34.85s" baseline re-measured at 33.67s.
+
+With racing, the first round saved and promoted in generation 5.
+
+### Hunger was calibrated, not guessed
+
+45 migrated-champion fish, 1 trained shark, 60s, 12 seeds: 30s energy with 24 pellets meant
+31 of 45 starved (a famine, not a trade-off). The chosen 40s / 40 pellets gives about 14
+starved. Changing only the food-seeking weights by hand cut that to 5. So starvation is
+avoidable by behaviour, at the cost of pack cohesion: a real gradient.
+
+### Commands
+
+```bash
+node coevolve.js --rounds 6 --fish-gens 15 --shark-gens 12   # the main loop now
+node train.js --gens 30            # fish only, vs the newest trained shark
+node train-shark.js --gens 40      # shark only, vs the page's champion (45 fish)
+node tests/v3_benchmark.js 24      # start vs trained, plus ablations (read-only)
+# controls: --rules  --hand-planner  --no-hunger  --no-prior  --opponent chaser  --workers 0
+```
+
+Page keys: **t** teamwork learned/rules, **p** planner critic/hand, **h** hunger on/off.
+
+**Fish auto-training is ON in the page by default** (user request, 2026-09-22): the tank
+starts from the champion plus mutated children and breeds. The **fish brain generation**
+dropdown lists the champion (`best.js`), every generation `train.js` recorded
+(`champions/fish-history.js`, written each generation; `node tools/backfill-fish-history.js`
+rebuilds it from the archive), and every generation auto-trained in this browser
+(localStorage `fish-page-history-v3`). Choosing one reseeds the tank from it: mutated
+children when auto-train is on, exact copies when off. Finding #3 is why the untouched
+champion stays one click away.
+
+**FISH BRAIN: ON/OFF** (beside the dropdown) mirrors the shark's switch. Off = Stage 0's random
+drift; since `Schooling.active()` needs "network" mode, packs, alarms and planning stop too.
+`World.nextGeneration()` now keeps the same brains whenever evolution is not running, in ANY
+mode. Before, a brain-off generation boundary spawned random brains, and switching back on
+found strangers.
+
+<!-- V3-RESULTS -->
+
+## Earlier update: the shark has a brain (2026-09-21, by explicit request)
+
 
 The standing rule "do not give the shark a brain without asking" was lifted by the
 user, who asked for: a shark brain, one survival instinct (no meal in 10s = death),
@@ -243,12 +345,12 @@ index.html         Loads js/* as plain <script> tags IN ORDER, then champions/be
 js/config.js       EVERY tunable number, with the measurement that chose it
 js/rng.js          Seeded generator (mulberry32) + gaussian. Never use Math.random().
 js/vec.js          2D helpers as loose functions on plain numbers (no allocation)
-js/senses.js       World -> 7 numbers, all 0..1, all egocentric
+js/senses.js       World -> 23 numbers (layout v3), all egocentric
 js/brain.js        Neuron, Layer, Network (the fixed 7-6-2 net from Stage 3)
-js/genome.js       Genome + Innovation (NEAT-lite: brains that GROW). The default.
+js/genome.js       Genome + Innovation (NEAT-lite) + Critic (evolved route ranker) + v2->v3 migration
 js/evolution.js    Fitness, tournament, crossover, speciation, diversity metrics
 js/fish.js         Body + think(). The brain plugs in here.
-js/schooling.js    Packs, alpha election, perception, alarms, memory, escape planner
+js/schooling.js    Packs, alpha election, perception, alarms, social senses, escape planner
 js/sharkbrain.js   Shark senses (8) + SharkBrain, a fixed 8-6-2 net. Optional.
 js/shark.js        Predator. Brainless by default; think() when a brain is set
 js/sharktrainer.js SharkTrainer (shark self-training) + SharkHistory file format
@@ -258,9 +360,12 @@ js/brainview.js    The Stage 6 inspector: draws any graph(), reads its arithmeti
 js/chart.js        Fitness + parameter count per generation
 js/persist.js      Brain <-> JSON, with validation
 js/main.js         The loop, view state, all DOM wiring
-train.js           Offline trainer. This is where real learning happens.
+train.js           Offline fish trainer (45 fish, vs trained sharks, racing, ladder)
 train-shark.js     Offline SHARK trainer -> champions/shark-best.js
-tests/             8 suites + run-all.js
+coevolve.js        Alternates the two, with a cross-scoreboard -> champions/coevolution.json
+evaluation.js      Scoring one brain; the same code in every thread
+parallel.js        Worker-thread pool (all CPU cores); Pool(0) = in-thread
+tests/             18 suites + run-all.js; v3_benchmark.js (read-only)
 champions/         best.json (solo), best-shoal8.json, best.js (page loads this),
                    archive/ (every improvement, never overwritten), history.json
 PLAN.md            The full build log, stage by stage, with every measurement
@@ -279,10 +384,11 @@ after `brain.js` (it borrows `blendHue`).
 |---|---|
 | brain kind | `genome` (grows). `layered` is the fixed 7-6-2 net, kept for comparison |
 | tank | 45 fish, 1 shark, 900x600 closed box |
-| senses | 5 rays over 160°, wall-ahead, own speed = **7 inputs** |
-| generation | 60s, 4 trials averaged |
+| senses | 9 rays over 330°, wall, speed, closing + 11 layout-v3 senses = **23 inputs** |
+| page environment | v3: learned teamwork, evolved critic, hunger; shark brain on |
+| training | 45 fish x 48 brains x 3 trials (+ top 8 raced x 9), 45s, 2+ trained sharks |
 | page evolution | **OFF** by default (see finding #3) |
-| champion | shoal-trained: 39.9s/45s mean shoal survival, 65 params, 11 hidden |
+| champion | see "V3 results" at the top: migrated v2 brain, then co-evolved |
 
 ---
 
@@ -410,7 +516,7 @@ Kept on purpose. They are in `PLAN.md` next to the reasoning that produced them.
 
 ## Open problems / what to do next
 
-1. **The champion is trained at 8 clones but displayed at 45.** Objective mismatch. Fix
+1. **DONE 2026-09-21: training now runs at 45 fish.** Previously: *the champion is trained at 8 clones but displayed at 45.* Objective mismatch. Fix
    with `node train.js --clones 45 --gens 40 --pop 40 --secs 45` (slower: 45 fish per
    evaluation). Expect ~20-30 min.
 2. **Benchmark variance is still high** — between-seed sd of 12-21 percentage points on
@@ -496,14 +602,14 @@ failed for exactly this reason.
 2. **An explicit closing-rate sense.** Rays report distance only. Memory lets the network
    *derive* rate of change, but handing it the derivative directly is far cheaper to learn
    than discovering differentiation from scratch.
-3. **A harder task.** At one shark the shoal already survives 97% of a generation, so the
+3. **Partly done 2026-09-21 (trained sharks, hunger, difficulty ladder).** *A harder task.* At one shark the shoal already survives 97% of a generation, so the
    score has saturated and selection has almost nothing to choose between brains. Nothing
    above will show up in the numbers until this is fixed — more sharks, longer
    generations, or a faster predator.
 4. **Lifetime learning.** Everything here is learned *between* generations. Hebbian or
    neuromodulated plasticity would let a fish adapt *within* its own life. This is the
    largest remaining architectural jump, and the biggest amount of work.
-5. **Co-evolving the shark.** The shark now has a brain, but it trains against a *fixed*
+5. **DONE 2026-09-21: `coevolve.js`.** *Co-evolving the shark.* The shark now has a brain, but it trains against a *fixed*
    champion fish. True co-evolution (both sides training at once) is still not done.
    Numbers taken with the brained shark are not comparable with the rest of `PLAN.md`.
 

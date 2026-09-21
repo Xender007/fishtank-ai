@@ -435,6 +435,10 @@ canvas { display: block; }
 .is-ray   { background: linear-gradient(90deg, var(--predator-deep), var(--danger)); }
 .is-wall  { background: linear-gradient(90deg, #7a5a20, var(--warn)); }
 .is-speed { background: linear-gradient(90deg, var(--prey-deep), var(--prey)); }
+.is-team  { background: linear-gradient(90deg, #4b3a8a, #a48cf0); }
+.is-food  { background: linear-gradient(90deg, #3d6b2a, #9bdc6a); }
+/* A negative direction sense grows from the right-hand end. */
+.sense-bar.neg { position: absolute; right: 0; top: 0; }
 
 .sense-val {
   font-size: var(--fs-xs);

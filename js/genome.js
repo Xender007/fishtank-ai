@@ -95,6 +95,9 @@ class Genome {
     this.nodes = nodes;   // [{ id, type, bias }]
     this.conns = conns;   // [{ inn, from, to, w, enabled }]
     this.hue = 0;
+    // The planner critic this genome carries (see Critic below). null means
+    // "use the hand-written ranking", which is also what Critic.hand() encodes.
+    this.critic = null;
     this.rebuild();
   }
 
@@ -123,6 +126,7 @@ class Genome {
 
     const g = new Genome(nodes, conns);
     g.hue = rng.next() * 360;
+    g.critic = Critic.hand();      // consumes no randomness: see Critic.hand()
     return g;
   }
 
@@ -307,6 +311,7 @@ class Genome {
                              plasticity: c.plasticity }))
     );
     g.hue = this.hue;
+    g.critic = this.critic ? this.critic.clone() : null;
     return g;
   }
 }
@@ -459,6 +464,10 @@ Genome.prototype.mutate = function (rng, rate, strength) {
   if (rng.next() < cfg.addNodeRate)       { e = this.mutateAddNode(rng);       if (e) events.push(e); }
   if (rng.next() < cfg.addConnectionRate) { e = this.mutateAddConnection(rng); if (e) events.push(e); }
   if (rng.next() < cfg.toggleRate)        { e = this.mutateToggle(rng);        if (e) events.push(e); }
+  // The critic only evolves while it is actually in charge of planning. With
+  // the hand-written planner it is inert, and leaving it (and its random
+  // draws) alone keeps every older seeded experiment reproducible.
+  if (CONFIG.learned.planner && this.critic) this.critic.mutate(rng, rate);
   return events;
 };
 
@@ -514,6 +523,8 @@ Genome.prototype.crossover = function (other, rng) {
 
   const child = new Genome(nodes, conns);
   child.hue = blendHue(this.hue, other.hue);
+  if (this.critic && other.critic && CONFIG.learned.planner) child.critic = this.critic.crossover(other.critic, rng);
+  else child.critic = this.critic ? this.critic.clone() : other.critic ? other.critic.clone() : null;
   return child;
 };
 
@@ -577,4 +588,194 @@ Genome.prototype.graph = function () {
                                   enabled: c.enabled, recurrent: !!c.recurrent })),
     maxDepth: this.maxDepth,
   };
+};
+
+// =============================================================================
+// THE PLANNER CRITIC - the part of the brain that chooses between futures.
+// =============================================================================
+// The escape planner imagines ~40 manoeuvres ahead and has to pick one. Until
+// layout v3 the choice was MY formula:
+//
+//     score = 2 x clearance + 0.65 x final gap - 18 x collision - wall
+//             - 0.06 x distance from pack - 1.5 x |turn - reflex|
+//             - 3 x |turn - last turn|
+//
+// Every one of those coefficients is a guess I made, and "Stage 2: the
+// hand-wired neuron" is the standing warning about guesses like that.
+//
+// A critic is those same numbers made into genes, plus a little extra
+// capacity:
+//
+//     score = SUM_k  w[k] * feature[k]                    <- the linear part
+//           + SUM_j  v[j] * tanh(b[j] + SUM_k u[j,k] * feature[k] / scale[k])
+//                                                          <- 3 hidden units
+//
+// Critic.hand() sets w to exactly my coefficients and v to zero, so a new
+// critic ranks every route EXACTLY as the hand-written planner did - the same
+// floating-point operations in the same order, bit for bit (tested). From
+// there evolution owns it: it can re-weigh clearance against walls, learn
+// that braking is worth something, or use the hidden units to make a trade
+// depend on how close the shark already is ("urgency"), which no single fixed
+// coefficient can express.
+//
+// The planner still does the IMAGINING (a physics forecast, not learned). The
+// brain now does the CHOOSING.
+// =============================================================================
+class Critic {
+  constructor(w, u, b, v) { this.w = w; this.u = u; this.b = b; this.v = v; }
+
+  // The raw feature for each slot is what Schooling.decide() measures. SCALE
+  // only normalises what the hidden units see, so a tanh is not saturated by a
+  // clearance of 300px. The linear part uses the raw values, which is what
+  // lets it reproduce the hand formula exactly.
+  static get FEATURES() {
+    return ['clearance', 'final gap', 'collision', 'wall', 'pack distance',
+            'vs reflex', 'vs last turn', 'braking', 'urgency'];
+  }
+  static get SCALE() { return [100, 100, 10, 100, 100, 1, 1, 1, 1]; }
+  static get HAND() { return [2, 0.65, -18, -1, -0.06, -1.5, -3, 0, 0]; }
+  static get HIDDEN() { return 3; }
+
+  // Consumes NO simulation randomness: the hidden units' starting weights come
+  // from a private generator, so giving every new genome a critic does not
+  // shift a single fish spawn in any seeded experiment.
+  static hand() {
+    const F = Critic.FEATURES.length, H = Critic.HIDDEN, r = new Rng(97);
+    const u = new Float64Array(H * F);
+    for (let i = 0; i < u.length; i++) u[i] = r.gaussian() * 0.5;
+    return new Critic(Float64Array.from(Critic.HAND), u, new Float64Array(H), new Float64Array(H));
+  }
+
+  // `f` holds raw features. Summed in feature order, starting from
+  // w[0] * f[0], so that with v = 0 the result is bit-identical to the hand
+  // formula's left-to-right evaluation.
+  score(f) {
+    const w = this.w, F = w.length;
+    let s = w[0] * f[0];
+    for (let k = 1; k < F; k++) s += w[k] * f[k];
+    const H = this.v.length, scale = Critic.SCALE;
+    for (let j = 0; j < H; j++) {
+      if (this.v[j] === 0) continue;            // a silent unit costs nothing
+      let a = this.b[j];
+      for (let k = 0; k < F; k++) a += this.u[j * F + k] * f[k] / scale[k];
+      s += this.v[j] * Math.tanh(a);
+    }
+    return s;
+  }
+
+  clone() {
+    return new Critic(this.w.slice(), this.u.slice(), this.b.slice(), this.v.slice());
+  }
+
+  // The linear weights span three orders of magnitude (-18 to 0.06), so a
+  // fixed-size jitter would be enormous for one and invisible for another.
+  // They are mutated MULTIPLICATIVELY instead - a percentage change - plus a
+  // small additive term so a weight can cross zero and change sign.
+  mutate(rng, rate) {
+    for (let k = 0; k < this.w.length; k++) {
+      if (rng.next() < rate) this.w[k] = this.w[k] * Math.exp(rng.gaussian() * 0.25) + rng.gaussian() * 0.02;
+    }
+    for (const arr of [this.u, this.b, this.v]) {
+      for (let i = 0; i < arr.length; i++) if (rng.next() < rate) arr[i] += rng.gaussian() * 0.2;
+    }
+  }
+
+  // Linear weights are independent coefficients, so each is inherited on its
+  // own coin; a hidden unit travels whole (neuron-wise, Stage 5's winner).
+  crossover(other, rng) {
+    const c = this.clone(), F = this.w.length;
+    for (let k = 0; k < F; k++) if (rng.next() < 0.5) c.w[k] = other.w[k];
+    for (let j = 0; j < this.v.length; j++) {
+      if (rng.next() < 0.5) continue;
+      for (let k = 0; k < F; k++) c.u[j * F + k] = other.u[j * F + k];
+      c.b[j] = other.b[j];
+      c.v[j] = other.v[j];
+    }
+    return c;
+  }
+
+  // What evolution has done to my coefficients, for logs and the inspector.
+  describe() {
+    const names = Critic.FEATURES, hand = Critic.HAND;
+    return names.map((n, k) => n + ' ' + (+this.w[k].toFixed(3)) +
+      (hand[k] !== this.w[k] ? ' (hand ' + hand[k] + ')' : '')).join(', ') +
+      ' · hidden pull ' + this.v.reduce((a, x) => a + Math.abs(x), 0).toFixed(2);
+  }
+
+  isHand() {
+    const hand = Critic.HAND;
+    return this.v.every(x => x === 0) && hand.every((x, k) => this.w[k] === x);
+  }
+
+  toJSON() {
+    return { w: Array.from(this.w), u: Array.from(this.u), b: Array.from(this.b), v: Array.from(this.v) };
+  }
+
+  static fromJSON(d) {
+    const F = Critic.FEATURES.length, H = Critic.HIDDEN;
+    if (!d || !Array.isArray(d.w) || d.w.length !== F || !Array.isArray(d.u) || d.u.length !== H * F ||
+        !Array.isArray(d.b) || d.b.length !== H || !Array.isArray(d.v) || d.v.length !== H) {
+      throw new Error('planner critic has the wrong shape');
+    }
+    if (![...d.w, ...d.u, ...d.b, ...d.v].every(Number.isFinite)) throw new Error('planner critic contains a non-number');
+    return new Critic(Float64Array.from(d.w), Float64Array.from(d.u), Float64Array.from(d.b), Float64Array.from(d.v));
+  }
+}
+
+// =============================================================================
+// MIGRATING A LAYOUT-v2 BRAIN TO LAYOUT v3
+// =============================================================================
+// Every earlier layout change (5 rays -> 9) invalidated every saved brain,
+// because the inputs changed MEANING. v3 is different: it only APPENDS senses.
+// Inputs 0-11 mean exactly what they meant before, so a v2 brain can be
+// carried over rather than thrown away:
+//
+//   - input ids are unchanged; the two outputs and every hidden neuron are
+//     renumbered upward to make room for the eleven new inputs;
+//   - each new input is wired to both outputs, like a minimal genome.
+//
+// The new weights are a PRIOR, not zero. A v2 brain never steered in calm
+// water - my pack rules did - so with zero weights it would simply circle and
+// the school would dissolve before evolution had a chance to rebuild it.
+// TEAM_PRIOR is a rough hand translation of those rules into weights (steer
+// toward the pack, match its heading, sidestep the nearest fish, drift toward
+// food). It is only where learning STARTS: every one of these is an ordinary
+// gene from then on. `prior: false` wires them at zero instead - the control
+// experiment for "is the prior doing the work?".
+// =============================================================================
+Genome.TEAM_PRIOR = {
+  turn:   { PACK_PULL: 2.0, ALIGN: 2.0, NEIGHBOUR: -2.5, FOOD_DIR: 2.5 },
+  thrust: { PACK_FAR: 1.0, ALARM: 0.5 },
+};
+
+Genome.migrateLegacy = function (data, options) {
+  const L = Senses.LEGACY_V2_COUNT, N = Senses.COUNT;
+  const prior = !options || options.prior !== false;
+  const shift = id => id < L ? id : id + (N - L);   // outputs and hidden move up together
+  const nodes = [];
+  for (let id = 0; id < N; id++) nodes.push({ id, type: NODE_INPUT, bias: 0 });
+  for (const n of data.nodes) if (n.type !== NODE_INPUT) nodes.push({ id: shift(n.id), type: n.type, bias: n.bias });
+
+  const conns = data.conns.map(c => ({ inn: c.inn, from: shift(c.from), to: shift(c.to),
+    w: c.w, enabled: c.enabled !== false, recurrent: !!c.recurrent, plasticity: c.plasticity || 0 }));
+
+  // Register the carried-over numbering BEFORE issuing any new numbers, or a
+  // new connection could be handed an innovation number this brain already
+  // uses for something else.
+  Innovation.absorb({ nodes, conns });
+  const key = {};
+  for (const name of ['PACK_PULL', 'PACK_FAR', 'ALIGN', 'NEIGHBOUR', 'CROWDED', 'ALPHA',
+                      'ALARM_DIR', 'ALARM', 'ENERGY', 'FOOD_DIR', 'FOOD_NEAR']) key[Senses[name]] = name;
+  for (let id = L; id < N; id++) {
+    for (const [out, table] of [[N, Genome.TEAM_PRIOR.turn], [N + 1, Genome.TEAM_PRIOR.thrust]]) {
+      const w = prior && table[key[id]] !== undefined ? table[key[id]] : 0;
+      conns.push({ inn: Innovation.forConnection(id, out), from: id, to: out, w, enabled: true,
+                   recurrent: false, plasticity: 0 });
+    }
+  }
+  const migrated = new Genome(nodes, conns);
+  migrated.hue = typeof data.hue === 'number' ? data.hue : 200;
+  migrated.critic = Critic.hand();
+  migrated.migratedFrom = 'v2';
+  return migrated;
 };

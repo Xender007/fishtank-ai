@@ -51,9 +51,13 @@ try {
   store.publish(improved);
   const sim = createSimulation();
   const a = safeFromJSON(sim.Persist, brain), b = safeFromJSON(sim.Persist, store.display());
-  const probe = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7];
+  // One value per input. (This probe used to be 7 long: on a 23-input brain the
+  // rest read undefined, both outputs were NaN, and NaN === NaN in JSON form -
+  // so the check passed without comparing anything.)
+  const probe = Array.from({ length: sim.Senses.COUNT }, (_, i) => 0.1 * ((i % 9) + 1));
+  const outA = a.decide(probe), outB = b.decide(probe);
   check('publish and reload preserve the exact learned neural outputs',
-    JSON.stringify(a.decide(probe)) === JSON.stringify(b.decide(probe)));
+    Number.isFinite(outA.turn) && JSON.stringify(outA) === JSON.stringify(outB));
   check('previous browser champion is retained in an immutable archive',
     fs.readdirSync(store.file('archive')).length === 1);
   check('benchmark precision survives save and reload', store.display().meta.displayBenchmark === 58.123456789);

@@ -1,0 +1,60 @@
+[
+  {
+    "round": 1,
+    "finished": "2026-09-21T17:27:06.033Z",
+    "minutes": 20.033466666666666,
+    "fishGenerations": 12,
+    "sharkGenerations": 15,
+    "sharkGeneration": 315,
+    "startSharkGeneration": 300,
+    "oldBoth": {
+      "eaten": 14.416666666666666,
+      "starved": 11.166666666666666,
+      "sharkStarvations": 1.1666666666666667
+    },
+    "newFishOldShark": {
+      "eaten": 14.416666666666666,
+      "starved": 11.166666666666666,
+      "sharkStarvations": 1.1666666666666667
+    },
+    "oldFishNewShark": {
+      "eaten": 14.583333333333334,
+      "starved": 11.333333333333334,
+      "sharkStarvations": 1.75
+    },
+    "now": {
+      "eaten": 14.583333333333334,
+      "starved": 11.333333333333334,
+      "sharkStarvations": 1.75
+    }
+  },
+  {
+    "round": 1,
+    "finished": "2026-09-21T18:56:14.018Z",
+    "minutes": 33.99113333333333,
+    "fishGenerations": 15,
+    "sharkGenerations": 12,
+    "sharkGeneration": 332,
+    "startSharkGeneration": 320,
+    "oldBoth": {
+      "eaten": 17.333333333333332,
+      "starved": 5.083333333333333,
+      "sharkStarvations": 0.5
+    },
+    "newFishOldShark": {
+      "eaten": 14.333333333333334,
+      "starved": 4.916666666666667,
+      "sharkStarvations": 1.1666666666666667
+    },
+    "oldFishNewShark": {
+      "eaten": 18.75,
+      "starved": 4.833333333333333,
+      "sharkStarvations": 0.9166666666666666
+    },
+    "now": {
+      "eaten": 11.666666666666666,
+      "starved": 7.5,
+      "sharkStarvations": 1.5833333333333333
+    }
+  }
+]

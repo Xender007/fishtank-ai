@@ -1,0 +1,71 @@
+
+  CO-EVOLUTION · 6 rounds · fish 15 gens, shark 12 gens per round · 8 worker thread(s)
+  starting shark: generation 320
+
+  ===== round 1 of 6: the fish train =====
+  pruned 7 file(s): 0 unloadable, 7 superseded
+
+  resuming from best-v3-team-critic-hunger-shoal45.json · 55 params · after 402 generations
+  environment: v3-team-critic-hunger · opponent: trained shark gen 320 + gen 247 · 8 worker thread(s)
+  baseline: held-out 34.78s of 45s · page setting 47.01s of 60s
+  population 48 · 3 trials (top 8 raced +9) · 45s · 45 fish per shoal · target species 5
+
+  gen    mean    best  eaten starved sharks params hidden  mem spec   held-out
+  --------------------------------------------------------------------------------------
+  1      35.4s   36.8s   17.3     5.3      2     55      2    0    1   92s 
+  2      34.2s   36.8s   18.6     5.2      2     57      3    0    1   92s 
+  3      35.7s   37.0s   16.5     5.6      2     56      2    0    1   96s 
+  4      34.5s   36.1s   18.2     4.9      2     57      3    0    1  112s 
+  5      36.0s   36.4s   16.9     4.6      2     56      2    0    5  189s 34.5s / page 47.3s PROMOTED
+  6      34.1s   35.7s   19.3     4.5      2     56      2    0    7  131s 
+  7      34.7s   36.0s   17.3     6.0      2     58      2    0    7  103s 
+  8      35.0s   36.6s   17.5     5.5      2     59      3    0    8  101s 
+  9      34.5s   35.7s   17.9     5.8      2     59      3    0    8   96s 
+  10     33.2s   36.3s   19.2     5.9      2     60      3    0    7  133s 34.6s / page 47.3s PROMOTED
+  11     34.8s   36.3s   17.5     5.9      2     58      2    0    6  106s 
+  12     32.8s   36.1s   19.4     6.0      2     59      3    0    6   95s 
+  13     34.8s   35.9s   17.7     6.1      2     57      3    0    5  109s 
+  14     35.2s   36.9s   16.9     6.9      2     63      5    0    6  116s 
+  15     34.7s   36.6s   17.6     5.6      2     59      3    0    5  155s 34.3s / page 46.0s
+
+  done in 29.4 min · 422 generations of accumulated evolution
+  held-out: 34.78s of 45s · page setting: 47.31s of 60s
+  page champion's planner: clearance 0.589 (hand 2), final gap 0.612 (hand 0.65), collision -18, wall -1.289 (hand -1), pack distance -0.04 (hand -0.06), vs reflex -1.62 (hand -1.5), vs last turn -3.645 (hand -3), braking 0.016 (hand 0), urgency -0.029 (hand 0) · hidden pull 0.89
+
+  ===== round 1 of 6: the shark trains =====
+
+  resuming from shark generation 320 (16.25 kills/trial)
+  population 32 · trials 4 · 20s · 45 champion fish · 8 worker thread(s)
+  gen  321   best 13.32 (12.75 kills)   population mean 9.44   21s
+  gen  322   best 13.79 (13.25 kills)   population mean 10.03   39s
+  gen  323   best 11.56 (11.00 kills)   population mean 9.32   58s
+  gen  324   best 13.31 (12.75 kills)   population mean 10.48   77s
+  gen  325   best 13.24 (12.75 kills)   population mean 9.69   98s
+  gen  326   best 11.32 (10.75 kills)   population mean 8.43   117s
+  gen  327   best 12.82 (12.25 kills)   population mean 8.29   136s
+  gen  328   best 11.28 (10.75 kills)   population mean 8.70   160s
+  gen  329   best 12.07 (11.50 kills)   population mean 8.99   184s
+  gen  330   best 10.30 (9.75 kills)   population mean 8.07   207s
+  gen  331   best 13.06 (12.50 kills)   population mean 9.52   227s
+  gen  332   best 12.27 (11.75 kills)   population mean 8.36   247s
+
+  scoreboard after round 1 (45 fish, 1 shark, 60s, 12 held-out seeds):
+    starting fish  vs starting shark   17.3 eaten  5.1 starved
+    NEW fish       vs starting shark   14.3 eaten  4.9 starved   <- did the fish improve?
+    starting fish  vs NEW shark        18.8 eaten  4.8 starved   <- did the shark improve?
+    NEW fish       vs NEW shark        11.7 eaten  7.5 starved
+
+  ===== round 2 of 6: the fish train =====
+  pruned 4 file(s): 0 unloadable, 4 superseded
+
+  resuming from best-v3-team-critic-hunger-shoal45.json · 55 params · after 407 generations
+  environment: v3-team-critic-hunger · opponent: trained shark gen 332 + gen 271 · 8 worker thread(s)
+  baseline: held-out 34.78s of 45s · page setting 47.09s of 60s
+  population 48 · 3 trials (top 8 raced +9) · 45s · 45 fish per shoal · target species 5
+
+  gen    mean    best  eaten starved sharks params hidden  mem spec   held-out
+  --------------------------------------------------------------------------------------
+  1      34.8s   35.6s   17.7     5.3      2     55      2    0    1  118s 
+  2      35.2s   36.2s   17.4     4.8      2     59      4    0    1  102s 
+  3      34.3s   36.4s   18.7     5.3      2     56      2    0    1  105s 
+  4      34.7s   36.5s   18.2     5.8      2     56      2    0    1  100s 

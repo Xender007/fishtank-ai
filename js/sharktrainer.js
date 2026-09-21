@@ -140,25 +140,70 @@ class SharkTrainer {
           // against schooling fish, and results depended on chunk size.
           CONFIG.schooling.enabled = this.schoolingThisTrial;
         }
-        const w = this.world;
-        w.update(CONFIG.sim.dt);
-
-        // Tie-breaker for brains that have not caught anything yet: PRESSURE,
-        // how close to the nearest fish it keeps. Steep on purpose - 50px
-        // matters, 300px barely registers - so near-misses outrank loitering
-        // beside a school. Worth less than one real catch.
-        const s = this.evalShark;
-        const f = w.nearestLivingFish(s.x, s.y);
-        if (f) this.closeness += Math.exp(-Math.max(0, V.dist(s.x, s.y, f.x, f.y) - CONFIG.shark.radius) / 50);
-        this.samples++;
-
-        const cleared = w.aliveCount() === 0;
-        if (!s.alive || cleared || w.ticks >= this.maxTicks) {
-          if (this.finishTrial(cleared)) { completed = true; break; }
-        }
+        const end = this.tick();
+        if (end && this.finishTrial(end.cleared)) { completed = true; break; }
       }
     });
     return completed;
+  }
+
+  // One tick of the current trial. Returns null while it runs, or
+  // { cleared } when it has ended.
+  tick() {
+    const w = this.world;
+    w.update(CONFIG.sim.dt);
+
+    // Tie-breaker for brains that have not caught anything yet: PRESSURE,
+    // how close to the nearest fish it keeps. Steep on purpose - 50px
+    // matters, 300px barely registers - so near-misses outrank loitering
+    // beside a school. Worth less than one real catch.
+    const s = this.evalShark;
+    const f = w.nearestLivingFish(s.x, s.y);
+    if (f) this.closeness += Math.exp(-Math.max(0, V.dist(s.x, s.y, f.x, f.y) - CONFIG.shark.radius) / 50);
+    this.samples++;
+
+    const cleared = w.aliveCount() === 0;
+    return !s.alive || cleared || w.ticks >= this.maxTicks ? { cleared } : null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // PARALLEL TRAINING (node, all CPU cores). A worker thread scores ONE
+  // candidate with every trial of the current generation, through exactly the
+  // same beginTrial/tick/trialScore code the page's time-sliced path uses, so
+  // the two cannot drift apart (tests/parallel_test.js checks they agree to
+  // the last bit). The main thread then hands all the scores to
+  // completeGeneration(), which breeds exactly as endGeneration() always has.
+  // ---------------------------------------------------------------------------
+  scoreCandidate(brain) {
+    const saved = [this.population, this.index, this.trial, this.world];
+    let score = 0, kills = 0;
+    try {
+      this.population = [brain];
+      for (let t = 0; t < this.cfg.trials; t++) {
+        this.index = 0; this.trial = t; this.world = null;
+        let end = null;
+        this.withTankConfig(() => {
+          this.beginTrial();
+          CONFIG.schooling.enabled = this.schoolingThisTrial;
+          while (!(end = this.tick())) { /* simulate */ }
+        });
+        const r = this.trialScore(end.cleared);
+        score += r.score / this.cfg.trials;
+        kills += r.kills / this.cfg.trials;
+      }
+    } finally {
+      [this.population, this.index, this.trial, this.world] = saved;
+    }
+    return { score, kills };
+  }
+
+  completeGeneration(results) {
+    for (let i = 0; i < this.cfg.population; i++) {
+      this.scores[i] = results[i].score;
+      this.kills[i] = results[i].kills;
+    }
+    this.endGeneration();
+    return this.lastRecord;
   }
 
   // Budgeted version for the page: simulate until `ms` of wall clock is used.
@@ -169,14 +214,18 @@ class SharkTrainer {
     return completed;
   }
 
-  finishTrial(cleared) {
+  trialScore(cleared) {
     const s = this.evalShark, w = this.world;
     // Emptying the tank early counts as a full life, so a shark is never
     // punished for eating everything quickly.
     const life = cleared ? 1 : Math.min(1, w.time / this.cfg.seconds);
-    const score = s.kills + 0.8 * (this.closeness / Math.max(1, this.samples)) + 0.25 * life;
-    this.scores[this.index] += score / this.cfg.trials;
-    this.kills[this.index] += s.kills / this.cfg.trials;
+    return { score: s.kills + 0.8 * (this.closeness / Math.max(1, this.samples)) + 0.25 * life, kills: s.kills };
+  }
+
+  finishTrial(cleared) {
+    const r = this.trialScore(cleared);
+    this.scores[this.index] += r.score / this.cfg.trials;
+    this.kills[this.index] += r.kills / this.cfg.trials;
     this.world = null;
 
     this.trial++;

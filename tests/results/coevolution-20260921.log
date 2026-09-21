@@ -1,0 +1,67 @@
+
+  CO-EVOLUTION · 3 rounds · fish 12 gens, shark 15 gens per round · 8 worker thread(s)
+  starting shark: generation 300
+
+  ===== round 1 of 3: the fish train =====
+  pruned 2 file(s): 0 unloadable, 2 superseded
+
+  resuming from display-best.json (migrated from layout v2, teamwork prior) · 53 params · after 325 generations
+  environment: v3-team-critic-hunger · opponent: trained shark gen 300 + gen 205 · 8 worker thread(s)
+  baseline: held-out 34.85s of 45s · page setting 46.34s of 60s
+  population 48 · 3 trials · 45s · 45 fish per shoal · target species 5
+
+  gen    mean    best  eaten starved sharks params hidden  mem spec   held-out
+  --------------------------------------------------------------------------------------
+  1      36.5s   39.6s   14.5     6.8      2     53      2    0    1   77s  +shark
+  2      31.2s   34.3s   23.0     6.1      3     53      2    0    1   73s 
+  3      32.4s   36.8s   21.9     5.5      3     53      2    0    1   76s 
+  4      32.3s   35.4s   22.2     5.5      3     54      2    0    2   71s 
+  5      32.8s   36.5s   20.9     6.8      3     54      2    0    3   85s 33.5s / page 42.2s
+  6      33.7s   36.8s   19.3     8.5      3     52      2    0    8   74s 
+  7      32.0s   35.4s   20.8     9.2      3     53      2    0    8   70s 
+  8      32.3s   35.5s   21.2     6.4      3     54      2    0    7   72s 
+  9      33.2s   36.1s   19.9     7.2      3     54      2    0    6   72s 
+  10     33.1s   35.9s   20.3     6.4      3     54      2    0    6   88s 34.1s / page 43.7s
+  11     31.8s   34.2s   21.1     7.4      3     55      2    0    6   73s 
+  12     32.2s   35.4s   20.4     8.0      3     54      2    0    4   88s 34.1s / page 45.3s
+
+  done in 15.6 min · 392 generations of accumulated evolution
+  held-out: 34.85s of 45s · page setting: 46.34s of 60s
+  page champion's planner: clearance 2, final gap 0.65, collision -18, wall -1, pack distance -0.06, vs reflex -1.5, vs last turn -3, braking 0, urgency 0 · hidden pull 0.00
+
+  ===== round 1 of 3: the shark trains =====
+
+  resuming from shark generation 300 (6.50 kills/trial)
+  population 32 · trials 4 · 20s · 45 champion fish · 8 worker thread(s)
+  gen  301   best 15.77 (15.25 kills)   population mean 13.49   17s
+  gen  302   best 14.51 (14.00 kills)   population mean 11.28   34s
+  gen  303   best 13.44 (13.00 kills)   population mean 8.97   52s
+  gen  304   best 17.51 (17.00 kills)   population mean 13.30   68s
+  gen  305   best 16.04 (15.50 kills)   population mean 12.04   85s
+  gen  306   best 14.98 (14.50 kills)   population mean 12.23   100s
+  gen  307   best 15.27 (14.75 kills)   population mean 11.73   116s
+  gen  308   best 15.02 (14.50 kills)   population mean 10.82   133s
+  gen  309   best 15.76 (15.25 kills)   population mean 10.92   148s
+  gen  310   best 20.29 (19.75 kills)   population mean 14.42   164s
+  gen  311   best 16.56 (16.00 kills)   population mean 13.19   180s
+  gen  312   best 17.22 (16.75 kills)   population mean 12.95   194s
+  gen  313   best 14.27 (13.75 kills)   population mean 10.84   208s
+  gen  314   best 15.80 (15.25 kills)   population mean 11.53   222s
+  gen  315   best 19.30 (18.75 kills)   population mean 12.94   239s
+
+  scoreboard after round 1 (45 fish, 1 shark, 60s, 12 held-out seeds):
+    starting fish  vs starting shark   14.4 eaten 11.2 starved
+    NEW fish       vs starting shark   14.4 eaten 11.2 starved   <- did the fish improve?
+    starting fish  vs NEW shark        14.6 eaten 11.3 starved   <- did the shark improve?
+    NEW fish       vs NEW shark        14.6 eaten 11.3 starved
+
+  ===== round 2 of 3: the fish train =====
+  pruned 2 file(s): 0 unloadable, 2 superseded
+
+  resuming from best-v3-team-critic-hunger-shoal45.json · 53 params · after 380 generations
+  environment: v3-team-critic-hunger · opponent: trained shark gen 315 + gen 239 · 8 worker thread(s)
+  baseline: held-out 33.74s of 45s · page setting 47.71s of 60s
+  population 48 · 3 trials · 45s · 45 fish per shoal · target species 5
+
+  gen    mean    best  eaten starved sharks params hidden  mem spec   held-out
+  --------------------------------------------------------------------------------------

@@ -1,0 +1,27 @@
+Selection noise in the v3 environment (2026-09-21). Reproduce with the
+reliability recipe in HANDOFF.md ("Finding #12").
+
+Environment: 45 fish per shoal, 45s trials, hunger on, learned teamwork and
+critic, opponents = trained shark gen 315 + hall-of-fame gen ~210.
+Brain: the migrated v2 champion (53 params) and 47 mutated children of it.
+
+One brain, 48 different seed sets:
+  3 trials  mean 31.22s  sd 1.66s  range 27.3-33.9
+  8 trials  mean 31.54s  sd 0.98s  range 29.4-33.7
+
+48 children scored twice on independent seed sets (rank correlation of the two):
+  mutation 0.15/0.35, 3 trials, 3 sharks   spread sd 1.11s   r = 0.04   parent ranks 38/48, 1/48
+  mutation 0.15/0.35, 3 trials, 2 sharks   spread sd 1.31s   r = 0.08   parent ranks  1/48, 4/48
+  mutation 0.15/0.35, 8 trials, 2 sharks   spread sd 0.91s   r = 0.20   parent ranks  3/48, 5/48
+  mutation 0.50/1.00, 8 trials, 2 sharks   spread sd 1.17s   r = 0.40   parent ranks  1/48, 2/48
+
+Reading: at the training setting (3 trials) the generation ranking was ~all luck.
+Bigger mutations make real differences, but nearly all of them are WORSE than the
+parent: the champion sits near a local optimum. Fix adopted: racing (top 8
+re-scored with 9 more trials before choosing elites) and 36-seed benchmarks.
+
+Run 1 (before racing), coevolve --rounds 3 --fish-gens 12 --shark-gens 15, stopped
+after round 1: fish never beat the starting champion (held-out 34.1s vs 34.85s,
+page 45.3s vs 46.3s); scoreboard 14.4 eaten / 11.2 starved (start vs start) vs
+14.6 / 11.3 (start fish vs new shark gen 315) - no change on either side.
+Log: tests/results/coevolution-20260921.log

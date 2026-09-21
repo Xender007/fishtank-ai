@@ -47,15 +47,41 @@ const Senses = {
     };
   },
 
-  // How many numbers a fish perceives: the rays, wall, speed, and - as of
-  // Stage 8 - three more for the company it keeps.
-  COUNT: CONFIG.senses.rayCount + 3 + (CONFIG.senses.neighbours ? 3 : 0),
+  // How many numbers a fish perceives: the rays, wall, speed, closing rate,
+  // the eleven layout-v3 senses below, and - optionally - Stage 8's three kin
+  // senses.
+  COUNT: CONFIG.senses.rayCount + 3 + 11 + (CONFIG.senses.neighbours ? 3 : 0),
 
   // Named indices, so nothing downstream ever hardcodes a number.
   WALL:  CONFIG.senses.rayCount,
   SPEED: CONFIG.senses.rayCount + 1,
   CLOSING: CONFIG.senses.rayCount + 2,  // is the nearest shark gaining on me?
-  KIN:   CONFIG.senses.rayCount + 3,   // first of three: negative, ahead, positive
+
+  // ---- LAYOUT v3: what a network needs to do the team's job itself ----------
+  // Until v3 the social layer READ these things and my rules acted on them;
+  // the network never saw them, so it could not have learned teamwork even in
+  // principle. You cannot learn to use information you are never given.
+  //
+  // Directions are bearings relative to the nose, divided by PI: -1..+1 with
+  // the same sign convention as the rays (negative = the -ray side). The two
+  // "pull" senses are a bearing MULTIPLIED by how much it matters, so one
+  // weight can express "steer toward the pack, harder the further away it is".
+  PACK_PULL: CONFIG.senses.rayCount + 3,   // bearing to my pack's centre x distance
+  PACK_FAR:  CONFIG.senses.rayCount + 4,   // how far that centre is (0..1 at 150px)
+  ALIGN:     CONFIG.senses.rayCount + 5,   // packmates' mean heading, relative to mine
+  NEIGHBOUR: CONFIG.senses.rayCount + 6,   // bearing to the nearest fish x closeness
+  CROWDED:   CONFIG.senses.rayCount + 7,   // how close that nearest fish is (1 = touching)
+  ALPHA:     CONFIG.senses.rayCount + 8,   // 1 if I am my pack's scout
+  ALARM_DIR: CONFIG.senses.rayCount + 9,   // bearing to the threat I know about, seen or told
+  ALARM:     CONFIG.senses.rayCount + 10,  // how fresh that warning is (1 = this instant)
+  ENERGY:    CONFIG.senses.rayCount + 11,  // 1 = full, 0 = starving
+  FOOD_DIR:  CONFIG.senses.rayCount + 12,  // bearing to the nearest pellet I can smell
+  FOOD_NEAR: CONFIG.senses.rayCount + 13,  // how close it is
+  // The layout before v3: rays + wall + speed + closing. Brains saved with this
+  // many inputs are MIGRATED (Genome.migrateLegacy), not refused, because their
+  // inputs are an exact prefix of v3.
+  LEGACY_V2_COUNT: CONFIG.senses.rayCount + 3,
+  KIN:   CONFIG.senses.rayCount + 14,  // first of three: negative, ahead, positive
 
   // The angle of ray i relative to the fish's nose. Ray 0 is hard left, the
   // middle ray looks dead ahead, the last ray is hard right.
@@ -77,6 +103,8 @@ const Senses = {
     out.push('wall ahead');
     out.push('own speed');
     out.push('closing');
+    out.push('pack pull', 'pack far', 'align', 'neighbour', 'crowded', 'is alpha',
+             'alarm dir', 'alarm', 'energy', 'food dir', 'food near');
     if (CONFIG.senses.neighbours) {
       out.push('kin −');      // neighbours on the negative-angle side
       out.push('kin ahead');
@@ -101,7 +129,58 @@ const Senses = {
     fish.senses[this.WALL]  = this.wallAhead(fish, world);
     fish.senses[this.SPEED] = fish.speed / CONFIG.fish.maxSpeed;
     fish.senses[this.CLOSING] = this.closingRate(fish, world);
+    this.readSocial(fish, world);
+    this.readFood(fish, world);
     if (CONFIG.senses.neighbours) this.readNeighbours(fish, world);
+  },
+
+  // ---------------------------------------------------------------------------
+  // LAYOUT v3 - the team, as numbers.
+  // ---------------------------------------------------------------------------
+  // Schooling.prepare() measures the pack and the neighbours for every fish
+  // from ONE snapshot at the start of the tick (fish.social), so no fish's
+  // senses depend on whether a packmate happened to move first. This only
+  // copies those numbers in. With the schooling layer off there is no pack
+  // and no alarm relay, and these read zero: a fish alone.
+  // ---------------------------------------------------------------------------
+  readSocial(fish, world) {
+    const s = Schooling.active(world) ? fish.social : null, out = fish.senses;
+    if (!s) {
+      out[this.PACK_PULL] = out[this.PACK_FAR] = out[this.ALIGN] = 0;
+      out[this.NEIGHBOUR] = out[this.CROWDED] = out[this.ALPHA] = 0;
+      out[this.ALARM_DIR] = out[this.ALARM] = 0;
+      return;
+    }
+    out[this.PACK_PULL] = s.packPull;
+    out[this.PACK_FAR]  = s.packFar;
+    out[this.ALIGN]     = s.align;
+    out[this.NEIGHBOUR] = s.neighbour;
+    out[this.CROWDED]   = s.crowded;
+    out[this.ALPHA]     = fish.isAlpha ? 1 : 0;
+    const t = fish.threat;
+    out[this.ALARM_DIR] = t ? V.angleDiff(V.angleTo(fish.x, fish.y, t.x, t.y), fish.heading) / Math.PI : 0;
+    out[this.ALARM]     = fish.alarm || 0;
+  },
+
+  // Energy and the nearest pellet. With hunger off the tank holds no food and
+  // energy reads a constant 1, so a trained brain sees a steady input rather
+  // than a missing one.
+  readFood(fish, world) {
+    const out = fish.senses;
+    out[this.ENERGY] = fish.energy === undefined ? 1 : fish.energy;
+    out[this.FOOD_DIR] = 0;
+    out[this.FOOD_NEAR] = 0;
+    const food = world.food;
+    if (!food || !food.length) return;
+    const range = CONFIG.hunger.senseRange;
+    let best = range * range, pellet = null;
+    for (const p of food) {
+      const d2 = V.dist2(fish.x, fish.y, p.x, p.y);
+      if (d2 < best) { best = d2; pellet = p; }
+    }
+    if (!pellet) return;
+    out[this.FOOD_DIR] = V.angleDiff(V.angleTo(fish.x, fish.y, pellet.x, pellet.y), fish.heading) / Math.PI;
+    out[this.FOOD_NEAR] = 1 - Math.sqrt(best) / range;
   },
 
   // ---------------------------------------------------------------------------
