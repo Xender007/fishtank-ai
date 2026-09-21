@@ -1,5 +1,5 @@
 {
-  "name": "master - pull requests and owner approval",
+  "name": "develop - pull requests and owner approval",
   "target": "branch",
   "enforcement": "active",
   "bypass_actors": [
@@ -11,19 +11,13 @@
   ],
   "conditions": {
     "ref_name": {
-      "include": [
-        "refs/heads/master"
-      ],
+      "include": ["refs/heads/develop"],
       "exclude": []
     }
   },
   "rules": [
-    {
-      "type": "deletion"
-    },
-    {
-      "type": "non_fast_forward"
-    },
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
     {
       "type": "pull_request",
       "parameters": {
@@ -32,18 +26,6 @@
         "require_code_owner_review": true,
         "require_last_push_approval": true,
         "required_review_thread_resolution": true
-      }
-    },
-    {
-      "type": "required_status_checks",
-      "parameters": {
-        "strict_required_status_checks_policy": false,
-        "required_status_checks": [
-          {
-            "context": "master accepts develop only",
-            "integration_id": 15368
-          }
-        ]
       }
     }
   ]

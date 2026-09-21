@@ -1,27 +1,46 @@
-# Changes to master
+# Branches and pull requests
 
-Push changes to a feature branch and open a pull request into `master`.
+```
+feature branch  --PR-->  develop  --PR (release)-->  master
+```
 
-- Every pull request requires approval from the code owner, `@Xender007`.
-- New reviewable commits dismiss previous approvals. The latest push must be
-  approved by someone other than the person who pushed it.
-- Review conversations must be resolved before merging.
-- Direct pushes, force pushes, and deletion of `master` are blocked.
-- The ruleset has no bypass actors, including the repository owner.
+- **All work targets `develop`.** Push a feature branch and open the pull request
+  into `develop`. `develop` is the repository's default branch, so new pull
+  requests target it automatically.
+- **`master` only accepts pull requests from `develop`.** The workflow
+  `.github/workflows/pr-source.yml` runs on every pull request into `master` and
+  fails unless the source is this repository's `develop` branch. The `master`
+  ruleset requires that check ("master accepts develop only"), so a pull request
+  from any other branch cannot be merged into `master`. Retarget it to `develop`.
 
-GitHub does not allow a pull request author to approve their own pull request.
-Because the owner is the only code owner, owner-authored pull requests cannot
-satisfy owner review under this policy. The owner must explicitly change the
-rules in GitHub Settings before making an exception, then restore protection.
+## Protection on both `develop` and `master`
 
-Manage the enforced rules in
-[GitHub Settings → Rules → Rulesets](https://github.com/Xender007/fishtank-ai/settings/rules).
-This is a personal-account repository; the owner controls its administrative
-settings. This policy does not add collaborators or grant administrative access.
+- Changes arrive only through pull requests. Direct pushes, force pushes and
+  branch deletion are blocked.
+- Pull requests require approval from the code owner, `@Xender007`. New commits
+  dismiss earlier approvals, the latest push must be approved by someone other
+  than its pusher, and review conversations must be resolved.
 
-`master-ruleset.json` is a reviewable copy of the intended GitHub ruleset.
-Editing that file alone does not update GitHub settings. `CODEOWNERS` determines
-the required owner and also protects changes to the ownership file itself.
+## The owner bypass
 
-These are server-side protections. They reject changes pushed directly to
-GitHub's `master`; they do not prevent making commits in a local checkout.
+Only `@Xender007` can bypass the rulesets, and only when merging a pull request.
+The bypass does not allow direct pushes, force pushes or branch deletion.
+
+GitHub does not let a pull request's author approve it, and the owner is the only
+code owner, so the owner uses the bypass option in GitHub's merge controls to
+merge their own pull requests. The bypass covers the whole ruleset for that merge,
+including the "master accepts develop only" check, so it is a deliberate choice
+each time, never automatic. Other contributors have no bypass: `CODEOWNERS`
+requests the owner's review on their pull requests.
+
+## Where the real settings live
+
+`master-ruleset.json` and `develop-ruleset.json` are reviewable copies of the
+GitHub rulesets. Editing them does not change GitHub. Apply them in
+[Settings → Rules → Rulesets](https://github.com/Xender007/fishtank-ai/settings/rules)
+("New ruleset → Import a ruleset" accepts these files). The default branch is set
+in Settings → General. This is a personal-account repository; the owner controls
+its administrative settings.
+
+These are server-side protections. They reject changes pushed to GitHub; they do
+not prevent commits in a local checkout.
