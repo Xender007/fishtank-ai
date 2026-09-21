@@ -312,11 +312,11 @@
   {
     "runId": "2026-09-21T18:56:14.051Z-10356",
     "started": "2026-09-21T18:56:14.051Z",
-    "finished": "2026-09-21T19:04:00.553Z",
+    "finished": "2026-09-21T19:08:09.682Z",
     "status": "running",
-    "generations": 4,
+    "generations": 6,
     "requestedGenerations": 15,
-    "totalGenerations": 426,
+    "totalGenerations": 428,
     "population": 48,
     "trials": 3,
     "clones": 45,
@@ -328,10 +328,10 @@
     "seed": 3308547310,
     "workers": 8,
     "evaluation": "{\"regime\":\"v3-team-critic-hunger\",\"clones\":45,\"seconds\":45,\"sharks\":2,\"runs\":36,\"seedBase\":500000,\"opponents\":\"afdb370197\",\"environment\":{\"layout\":\"v3\",\"dt\":0.016666666666666666,\"fish\":{\"speed\":90,\"turn\":3,\"radius\":5},\"shark\":{\"radius\":16,\"speed\":105,\"turn\":1.6,\"circleLimit\":3,\"circleBreakSeconds\":1.4},\"sharkBrain\":{\"starve\":10,\"respawn\":1.5,\"minSpeed\":0.5},\"tank\":{\"w\":900,\"h\":600},\"senses\":{\"rayCount\":9,\"fov\":5.759586531581287,\"range\":170,\"wallRange\":130,\"neighbours\":false,\"neighbourRange\":150,\"crowdScale\":3},\"schooling\":{\"enabled\":true,\"minSize\":7,\"targetSize\":9,\"spacing\":24,\"alarmRange\":150,\"memorySeconds\":2.5,\"scoutRange\":260,\"followerRange\":170,\"nearSense\":65,\"planEvery\":6,\"maxPlansPerTick\":8,\"predictionSteps\":10,\"predictionDt\":0.12,\"routeSteps\":16,\"dodgeSteps\":4},\"learned\":{\"teamwork\":true,\"planner\":true},\"hunger\":{\"enabled\":true,\"starveSeconds\":40,\"startEnergy\":0.7,\"pelletEnergy\":0.4,\"pellets\":40,\"pelletRadius\":4,\"senseRange\":220}}}",
-    "benchmark": 34.77859053497863,
-    "displayBenchmark": 47.09191358024548,
-    "params": 55,
+    "benchmark": 35.40578189300327,
+    "displayBenchmark": 47.712355967076725,
+    "params": 56,
     "hidden": 2,
-    "minutes": 7.775033333333333
+    "minutes": 11.927183333333334
   }
 ]

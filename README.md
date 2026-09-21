@@ -231,8 +231,8 @@ flowchart LR
     A["🐟 fish train<br/>48 brains × 45 fish<br/>vs trained sharks"] -->|best fish| B["🦈 shark trains<br/>32 brains<br/>vs the new fish"]
     B -->|best shark| C["📊 scoreboard<br/>new vs OLD opponents"]
     C -->|next round| A
-    A -. every generation .-> D[("champions/<br/>fish-history.js")]
-    B -. every generation .-> E[("champions/<br/>shark-best.js")]
+    A -.->|every generation| D[("champions/<br/>fish-history.js")]
+    B -.->|every generation| E[("champions/<br/>shark-best.js")]
     D --> P["🌐 the page's dropdowns"]
     E --> P
 ```
@@ -301,7 +301,7 @@ flowchart TB
         CO[coevolve.js] --> TR[train.js] & TS[train-shark.js]
         TR & TS --> PL[parallel.js<br/>worker per core] --> EV[evaluation.js]
     end
-    EV -. loads the same js/*.js .-> W
+    EV -.->|runs the same simulation files| W
 ```
 
 | file | what lives there |
