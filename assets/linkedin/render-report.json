@@ -1,0 +1,12 @@
+{
+  "mime": "video/mp4;codecs=avc1.420033",
+  "bytes": 9900447,
+  "width": 1080,
+  "height": 1350,
+  "duration": 23.990833,
+  "frames": 720,
+  "maxLateMs": 104,
+  "alive": 43,
+  "fishGeneration": 432,
+  "sharkGeneration": 332
+}

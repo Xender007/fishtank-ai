@@ -1,0 +1,56 @@
+﻿[
+    {
+        "text":  "I gave a shark a brain",
+        "start":  0.06,
+        "duration":  2.6199999999999997,
+        "confidence":  0.8180664
+    },
+    {
+        "text":  "Then I taught the fish to outsmart it",
+        "start":  0.77999999999999992,
+        "duration":  2.8,
+        "confidence":  0.677122533
+    },
+    {
+        "text":  "All because I asked Claude one question",
+        "start":  0.15,
+        "duration":  3.02,
+        "confidence":  0.891413569
+    },
+    {
+        "text":  "Can you teach me AI by building a game",
+        "start":  0,
+        "duration":  3.4,
+        "confidence":  0.858509243
+    },
+    {
+        "text":  "Now the fish evolve to escape",
+        "start":  0.38999999999999996,
+        "duration":  2.23,
+        "confidence":  0.8557171
+    },
+    {
+        "text":  "The shark evolves to catch them",
+        "start":  0,
+        "duration":  1.78,
+        "confidence":  0.89677
+    },
+    {
+        "text":  "And the coolest part",
+        "start":  0,
+        "duration":  1.01,
+        "confidence":  0.870422661
+    },
+    {
+        "text":  "You can click a fish and see the calculations behind its next move",
+        "start":  0,
+        "duration":  3.96,
+        "confidence":  0.8896698
+    },
+    {
+        "text":  "That\u0027s when neural networks finally clicked for me",
+        "start":  0,
+        "duration":  3.23,
+        "confidence":  0.9511668
+    }
+]

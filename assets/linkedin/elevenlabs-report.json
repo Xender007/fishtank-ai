@@ -1,0 +1,79 @@
+{
+  "mime": "video/mp4;codecs=avc1.420033,mp4a.40.2",
+  "bytes": 13642163,
+  "width": 1080,
+  "height": 1350,
+  "duration": 29.916167,
+  "frames": 898,
+  "maxLateMs": 25,
+  "alive": 37,
+  "fishGeneration": 432,
+  "sharkGeneration": 332,
+  "voice": "User supplied ElevenLabs Hope",
+  "sourceDuration": 28.917541666666665,
+  "audioPlaybackRate": 1,
+  "audioStart": 0.15,
+  "scenes": [
+    {
+      "end": 3.6,
+      "a": "I gave a shark",
+      "b": "a brain.",
+      "sub": "A neural network learned how to hunt."
+    },
+    {
+      "end": 7.15,
+      "a": "Then I taught fish",
+      "b": "to outsmart it.",
+      "sub": "45 fish. One learning predator."
+    },
+    {
+      "end": 10.65,
+      "a": "One question",
+      "b": "started all of this.",
+      "sub": "“Claude, can you teach me AI?”"
+    },
+    {
+      "end": 14.75,
+      "a": "Make it a game.",
+      "b": "Make it JavaScript.",
+      "sub": "Neural networks from scratch. Zero libraries."
+    },
+    {
+      "end": 19.55,
+      "a": "Learn to escape.",
+      "b": "Learn to hunt.",
+      "sub": "Fish and sharks train against each other."
+    },
+    {
+      "end": 25.45,
+      "a": "Click a fish.",
+      "b": "Look inside its brain.",
+      "sub": "See the inputs, weights and calculations."
+    },
+    {
+      "end": 29.917541666666665,
+      "a": "That’s when",
+      "b": "AI finally clicked.",
+      "sub": "Your turn. Explore the underwater experiment."
+    }
+  ],
+  "decodedFrameChecks": [
+    {
+      "time": 1,
+      "litSamples": 847
+    },
+    {
+      "time": 12,
+      "litSamples": 1007
+    },
+    {
+      "time": 23,
+      "litSamples": 798
+    },
+    {
+      "time": 28,
+      "litSamples": 823
+    }
+  ],
+  "audioBytesDecoded": 165032
+}
