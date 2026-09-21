@@ -63,7 +63,33 @@ everyone unverified below them) and **36-seed benchmarks** (the old 20-seed bar 
 0.9s lower; it had been set by luck). With both, the next run saved and promoted a new
 champion in its fifth generation.
 
-<!-- V3-RESULTS -->
+### V3 results (training stopped by request, 2026-09-22)
+
+Three co-evolution runs, ~2.5 hours of training on 8 threads, fish generations 380 -> 432,
+shark generations 300 -> 332. The first run (no racing) learned nothing; the numbers below
+are from the runs with racing and 36-seed benchmarks.
+
+| page champion, page setting (45 fish, 1 trained shark, 60s, 36 seeds) | survival of 60s |
+|---|---:|
+| start: migrated v2 champion, vs shark gen 300 | 46.35s |
+| after round 1 (gen 397), vs shark gen 300 | **48.27s** |
+| the same brain re-measured vs the co-evolved shark gen 320 | 47.01s |
+| final page champion (gen 432, 58 params), vs shark gen 320 | **47.81s** |
+
+Co-evolution scoreboard after one full round (45 fish, 1 shark, 60s, 12 held-out seeds):
+
+| | eaten | starved |
+|---|---:|---:|
+| starting fish vs starting shark | 17.3 | 5.1 |
+| new fish vs starting shark | **14.3** | 4.9 |
+| starting fish vs new shark | **18.8** | 4.8 |
+| new fish vs new shark | 11.7 | 7.5 |
+
+Both sides really improved: the new fish lose 3 fewer to the OLD shark, and the new shark
+catches 1.5 more of the OLD fish. Gains are modest (about +1.5-2s of survival per fish),
+because the champion sits near a local optimum (finding #12). Not yet run: the
+`--no-prior` control, and `node tests/v3_benchmark.js` for the learned-vs-written ablations.
+Logs: `tests/results/coevolution-20260921{,b,c}.log`, `champions/coevolution.json`.
 
 ## Stage 9, by request — the shark gets a brain (2026-09-21)
 
