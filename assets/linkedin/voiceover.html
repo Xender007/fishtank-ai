@@ -1,0 +1,60 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>fishtank-ai · Voiceover export</title>
+<style>body{margin:0;background:#06131d}canvas{height:100vh}</style>
+<canvas id="output" width="1080" height="1350"></canvas>
+<script>
+window.addEventListener('error',e=>fetch('/error',{method:'POST',body:e.message}));
+async function upload(name,blob){const r=await fetch('/output/'+name,{method:'POST',body:blob});if(!r.ok)throw Error('Upload failed');}
+async function run(){
+  const video=document.createElement('video');video.muted=true;video.preload='auto';
+  video.src='fishtank-ai-linkedin.mp4';
+  await new Promise((resolve,reject)=>{video.onloadeddata=resolve;video.onerror=reject;});
+  const ac=new AudioContext({sampleRate:48000});await ac.resume();
+  const clips=await Promise.all(Array.from({length:6},async(_,i)=>ac.decodeAudioData(await (await fetch(`voice-${i}.wav`)).arrayBuffer())));
+  const audioOut=ac.createMediaStreamDestination();
+  const canvas=document.getElementById('output'),ctx=canvas.getContext('2d');
+  ctx.drawImage(video,0,0);
+  const stream=canvas.captureStream(0),track=stream.getVideoTracks()[0];
+  stream.addTrack(audioOut.stream.getAudioTracks()[0]);
+  const mime=['video/mp4;codecs=avc1.420033,mp4a.40.2','video/mp4;codecs=avc1.42001f,mp4a.40.2'].find(m=>MediaRecorder.isTypeSupported(m));
+  if(!mime)throw Error('H.264 + AAC recording unavailable');
+  const recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:7000000,audioBitsPerSecond:192000});
+  const chunks=[];recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
+  const stopped=new Promise(r=>recorder.onstop=r);
+  recorder.start();await video.play();
+  const start=ac.currentTime;
+  const timing=clips.map((buffer,i)=>{
+    const source=ac.createBufferSource();source.buffer=buffer;
+    // Fit naturally within each four-second scene, allowing short pauses.
+    const speed=Math.max(1,buffer.duration/3.55);source.playbackRate.value=speed;
+    const gain=ac.createGain();gain.gain.value=.92;
+    source.connect(gain).connect(audioOut);source.start(start+i*4+.16);
+    return {scene:i+1,start:i*4+.16,originalSeconds:buffer.duration,spokenSeconds:buffer.duration/speed,playbackRate:speed};
+  });
+  let frames=0;
+  await new Promise(resolve=>{
+    function frame(){ctx.drawImage(video,0,0);track.requestFrame();frames++;if(video.ended)resolve();else video.requestVideoFrameCallback(frame);}
+    video.onended=()=>{ctx.drawImage(video,0,0);track.requestFrame();resolve();};
+    video.requestVideoFrameCallback(frame);
+  });
+  await new Promise(r=>setTimeout(r,70));recorder.stop();await stopped;
+  stream.getTracks().forEach(t=>t.stop());await ac.close();
+  const blob=new Blob(chunks,{type:mime});
+  await upload('fishtank-ai-linkedin-voiceover.mp4',blob);
+  // Decode the exported file and check audio presence and representative frames.
+  const check=document.createElement('video');check.muted=true;check.src=URL.createObjectURL(blob);
+  await new Promise((resolve,reject)=>{check.onloadeddata=resolve;check.onerror=reject;});
+  const samples=[];
+  for(const time of [1,11,22]){
+    await new Promise(r=>{check.onseeked=r;check.currentTime=time;});
+    ctx.drawImage(check,0,0);const pixels=ctx.getImageData(0,0,1080,1350).data;
+    let lit=0;for(let p=0;p<pixels.length;p+=400)if(pixels[p]+pixels[p+1]+pixels[p+2]>180)lit++;
+    samples.push({time,litSamples:lit});
+  }
+  const report={voice:'Microsoft Zira Desktop',type:'synthetic English narration',mime,bytes:blob.size,width:check.videoWidth,height:check.videoHeight,duration:check.duration,audioBytesDecoded:check.webkitAudioDecodedByteCount,frames,timing,decodedFrameChecks:samples};
+  await upload('voiceover-report.json',new Blob([JSON.stringify(report,null,2)]));
+  await fetch('/done',{method:'POST',body:JSON.stringify(report)});
+}
+run().catch(e=>fetch('/error',{method:'POST',body:e.stack||String(e)}));
+</script>
