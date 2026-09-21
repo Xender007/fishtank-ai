@@ -3,7 +3,7 @@
 // node tests/planner_benchmark.js [runs=12] [seconds=60] [seedBase=900001]
 const fs = require('fs'), vm = require('vm'), path = require('path');
 const root = path.join(__dirname, '..');
-const files = ['config','rng','vec','senses','brain','genome','evolution','fish','schooling','shark','world','persist'];
+const files = ['config','rng','vec','senses','brain','genome','evolution','fish','schooling','sharkbrain','shark','world','persist'];
 const champion = JSON.parse(fs.readFileSync(path.join(root, 'champions/best-shoal8.json'), 'utf8'));
 const runs = +(process.argv[2] || 12), seconds = +(process.argv[3] || 60), seedBase = +(process.argv[4] || 900001);
 for (const mode of ['previous', 'current']) {

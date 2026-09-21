@@ -2,7 +2,7 @@ const fs = require('fs');
 const vm = require('vm');
 const root = process.argv[2];
 
-const src = ['config','rng','vec','senses','brain','genome','evolution','fish','schooling','shark','world']
+const src = ['config','rng','vec','senses','brain','genome','evolution','fish','schooling','sharkbrain','shark','world']
   .map(n => fs.readFileSync(root + '/js/' + n + '.js', 'utf8')).join('\n');
 
 const test = `

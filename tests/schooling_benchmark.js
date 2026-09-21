@@ -2,7 +2,7 @@
 // to champions. Usage: node tests/schooling_benchmark.js [seeds=12] [seconds=60]
 const fs = require('fs'), vm = require('vm'), path = require('path');
 const root = path.join(__dirname, '..');
-const files = ['config','rng','vec','senses','brain','genome','evolution','fish','schooling','shark','world','persist'];
+const files = ['config','rng','vec','senses','brain','genome','evolution','fish','schooling','sharkbrain','shark','world','persist'];
 const src = files.map(n => fs.readFileSync(path.join(root, 'js', n + '.js'), 'utf8')).join('\n');
 const champion = JSON.parse(fs.readFileSync(path.join(root, 'champions/best-shoal8.json'), 'utf8'));
 const runs = Number(process.argv[2] || 12), seconds = Number(process.argv[3] || 60);

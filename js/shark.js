@@ -11,12 +11,15 @@
 //      the fish improved, a rising fitness score would be ambiguous - are the
 //      fish better, or did the shark just have a bad generation?
 //
-// It remains brainless. The only extra rule breaks repeated circular pursuit.
+// By default it remains brainless. The only extra rule breaks repeated
+// circular pursuit. An OPTIONAL brain (js/sharkbrain.js) can take over steering;
+// a brained shark also carries the survival instinct - it starves if it goes
+// CONFIG.sharkBrain.starveSeconds without eating.
 // =============================================================================
 
 class Shark {
 
-  constructor(x, y, heading) {
+  constructor(x, y, heading, brain) {
     this.x = x;
     this.y = y;
     this.heading = heading;
@@ -29,9 +32,50 @@ class Shark {
     this.breakRemaining = 0;
     this.breakSign = 0;
     this.circleBreaks = 0;
+    // null = the classic brainless chaser. See setBrain().
+    this.brain = null;
+    this.alive = true;
+    this.hunger = 0;          // seconds since the last meal; only a brain starves
+    this.senses = new Float64Array(SharkSenses.COUNT);
+    this.lastTurn = 0;
+    this.lastThrust = 1;
+    if (brain) this.setBrain(brain);
+  }
+
+  // Swap the driver without touching the body. A brainless shark always swims
+  // flat out, so switching the brain off restores that speed.
+  setBrain(brain) {
+    // Swapping one brain for another (a newer trained generation) keeps the
+    // hunger clock running - otherwise every swap would be a free meal. Only
+    // switching between brainless and brained starts it afresh.
+    if (!this.brain || !brain) this.hunger = 0;
+    this.brain = brain || null;
+    if (!this.brain) this.speed = CONFIG.shark.maxSpeed;
+  }
+
+  // The brain's version of update(): read the senses, run the network, apply
+  // the SAME physical limits as the brainless shark - it can choose to turn,
+  // never to turn faster than turnRate or swim faster than maxSpeed.
+  think(dt, world) {
+    const cfg = CONFIG.sharkBrain;
+    SharkSenses.read(this, world, this.senses);
+    const d = this.brain.decide(this.senses);
+    this.lastTurn = V.clamp(d.turn, -1, 1);
+    this.lastThrust = V.clamp(d.thrust, 0, 1);
+    this.heading = V.wrapAngle(this.heading + this.lastTurn * CONFIG.shark.turnRate * dt);
+    this.speed = CONFIG.shark.maxSpeed * (cfg.minSpeedFraction + (1 - cfg.minSpeedFraction) * this.lastThrust);
+    this.x += Math.cos(this.heading) * this.speed * dt;
+    this.y += Math.sin(this.heading) * this.speed * dt;
+    world.keepInsideTank(this, CONFIG.shark.radius);
+    this.age += dt;
+
+    // THE SURVIVAL INSTINCT. world.resolveEating() resets hunger on a catch.
+    this.hunger += dt;
+    if (this.hunger >= cfg.starveSeconds) { this.alive = false; this.starved = true; }
   }
 
   update(dt, world) {
+    if (this.brain) { this.think(dt, world); return; }
     const target = world.nearestLivingFish(this.x, this.y);
     let actualTurn = 0;
 

@@ -25,6 +25,8 @@
     <span>packs <b id="packs">0</b></span>
     <span>young <b id="young">0</b></span>
     <span>births <b id="births">0</b></span>
+    <span>eaten <b id="eaten">0</b></span>
+    <span>shark <b id="shark-hud">brainless</b></span>
     <span>speed <b id="speed">1&times;</b></span>
     <span id="paused">PAUSED</span>
   </div>
@@ -33,13 +35,37 @@
       <b>click a fish</b> to pin it &middot; <b>click a neuron</b> for its working &middot;
       <b>n</b> = step the forward pass &middot; <b>1 2 3 4</b> = speed &middot;
       g = breed now &middot; space = pause &middot; s = step time &middot;
-      v = rays &middot; l = lineage &middot; <b>e</b> = evolution on/off &middot; b = brain (<b id="mode">&mdash;</b>) &middot; r = restart
+      v = rays &middot; l = lineage &middot; <b>k</b> = shark brain on/off &middot; <b>e</b> = evolution on/off &middot; b = brain (<b id="mode">&mdash;</b>) &middot; r = restart
     </span>
   </div>
 
   <div id="stage">
     <div id="left">
       <canvas id="sea"></canvas>
+
+      <!-- The shark's optional brain. Right under the tank, because it is
+           steering the thing you are watching. -->
+      <section id="sharkpanel">
+        <div id="sharkcontrols">
+          <h2>shark brain</h2>
+          <button id="btn-shark-brain" class="toggle">SHARK BRAIN: OFF</button>
+          <button id="btn-shark-train" class="toggle on">SELF-TRAINING: ON</button>
+          <label class="sharkgen" for="shark-gen">brain generation</label>
+          <select id="shark-gen"></select>
+          <div class="hunger" title="Survival instinct: 10s without a meal and the shark dies">
+            <span>hunger</span>
+            <div class="hunger-track"><div id="hunger-bar"></div></div>
+            <b id="hunger-val">&ndash;</b>
+          </div>
+          <div id="shark-status" class="note"></div>
+          <div id="shark-train-note" class="note"></div>
+        </div>
+        <div id="sharkbrainwrap">
+          <div id="sharkmeta">&mdash;</div>
+          <canvas id="sharkbrain"></canvas>
+        </div>
+      </section>
+
       <canvas id="chart"></canvas>
     </div>
 
@@ -108,8 +134,6 @@
         <button id="btn-restore">restore last</button>
         <button id="btn-champion">load champion</button>
         <button id="btn-random">start random</button>
-        <button id="btn-champion">load champion</button>
-        <button id="btn-random">start random</button>
         <input type="file" id="file-load" accept="application/json" hidden>
       </div>
       <div id="savenote"></div>
@@ -140,8 +164,10 @@
   <script src="js/evolution.js"></script>
   <script src="js/fish.js"></script>
   <script src="js/schooling.js"></script>
+  <script src="js/sharkbrain.js"></script>
   <script src="js/shark.js"></script>
   <script src="js/world.js"></script>
+  <script src="js/sharktrainer.js"></script>
   <script src="js/render.js"></script>
   <script src="js/persist.js"></script>
   <script src="js/brainview.js"></script>
@@ -151,6 +177,8 @@
        champion as an assignment to window.CHAMPION. Missing file = no global,
        and the page simply starts from random brains. -->
   <script src="champions/best.js"></script>
+  <!-- Written by train-shark.js: one shark brain per trained generation. -->
+  <script src="champions/shark-best.js"></script>
   <script src="js/main.js"></script>
 
 </body>

@@ -8,9 +8,122 @@ AI/maths and wants to understand, not just run, what is here. That shapes everyt
 the code is heavily commented with *why*, decisions are measured rather than assumed, and
 several deliberate wrong turns are preserved because the failure taught more than the fix.
 
-**Status:** working. Existing 244-generation champion retained; 127 tests passing.
+**Status:** working. Fish champion unchanged; the shark now has an optional brain; 192 tests passing.
 
-## Current update: multi-step escape planning (social-v2, 2026-09-21)
+## Current update: the shark has a brain (2026-09-21, by explicit request)
+
+The standing rule "do not give the shark a brain without asking" was lifted by the
+user, who asked for: a shark brain, one survival instinct (no meal in 10s = death),
+automatic self-training against champion fish, one on/off button, a way to pick which
+generation's brain drives, and the shark's neural graph on screen. All built.
+
+**The measuring stick is preserved.** `CONFIG.sharkBrain.enabled` is `false`, so every
+test, benchmark and `train.js` still faces the brainless chaser. Only the page turns
+the brain on (in `main.js`, at startup). With the brain off the shark is exactly the old
+one: no hunger, no starvation, circle-breaking rule intact.
+
+- `js/sharkbrain.js` — `SharkSenses` (8 egocentric inputs: fish angle, fish close,
+  fish drift, crowd angle, crowd size, wall ahead, **hunger**, speed) and `SharkBrain`,
+  a fixed 8→6→2 tanh net (68 params; outputs turn and speed). **Not** a `Genome`: the
+  genome is wired to fish senses and one global `Innovation` counter, and sharing it
+  would let shark mutations renumber fish genes.
+- `js/shark.js` — `think()` runs the brain under the same limits as before (turnRate,
+  maxSpeed). The brain may slow to 50%, which halves its turning circle, 66px → 33px.
+  That is its main new lever. Hunger counts up and **the shark dies at exactly 10s**.
+  A meal resets hunger. Swapping one brain for another does not.
+- `js/world.js` — `setSharkBrain(brain|null)`. A starved shark is **removed from
+  `world.sharks`**, so no fish sense, alarm or planner can react to a dead predator.
+  It becomes a corpse in `world.sharkCorpses`, and a replacement arrives after 1.5s.
+  `world.evaluationOnly` makes a tank simulate only: no generation flip, no breeding,
+  no respawn (invariant #6).
+- `js/sharktrainer.js` — `SharkTrainer`: population 16, each candidate hunts 12
+  champion-fish clones for up to 20s. The same seeds are used for every candidate in a
+  generation, elites are re-scored every generation, and the loop is tournament +
+  neuron-wise crossover + gaussian mutation. It swaps CONFIG globals only inside
+  `withTankConfig()` and restores them in `finally`. The page gives it 4ms per frame.
+- `train-shark.js` — the fast offline path. It writes `champions/shark-history.json` and
+  `champions/shark-best.js` (one champion per generation, which the page loads) and ends
+  with a held-out benchmark against the brainless chaser.
+- Page: a panel under the tank with the **SHARK BRAIN** toggle (also key `k`), a
+  **SELF-TRAINING** toggle, a generation dropdown ("newest" follows training live), a
+  hunger bar, and the live network drawn by a second `BrainView` instance. The tank
+  shows a hunger ring and a fading "starved" corpse.
+  Page-trained generations persist in localStorage. Whichever of that and the file was
+  saved more recently wins.
+
+**Finding: against the champion's schooling fish, a 10s starvation clock is brutal.**
+Even the brainless chaser averages ~1 catch per 30s, so an untrained brain starved with
+zero kills and every score tied (finding #5 again). Fix: **mixed opponents**. Even trials
+face the champion's bare neural reflex, which is catchable and gives a gradient. Odd
+trials face the full schooling planner the page shows. Plus a steep proximity
+tie-breaker, worth less than one catch.
+
+**Two trainer bugs, found by the determinism test:** (1) a trial's schooling override
+leaked into the next trial's setup, so for a while *every* trial was reflex-only;
+(2) `step()` ran past a generation boundary, so large chunks could skip generations.
+Both are fixed and pinned by `tests/shark_brain_test.js` (21 assertions). The opponent is
+checked from inside the running tank, not from config. 189 tests pass.
+
+**Results.** 200 generations with 2 trials, then 100 more with 4 (population 24; about
+6s per generation offline). Held out against **schooling** champion fish (24 seeds never
+used in training, 12 fish, 20s, and the brainless chaser held to the same 10s rule):
+
+| shark | kills / 20s | starved |
+|---|---:|---:|
+| brainless chaser | 0.38 | 23/24 |
+| brain, gens 101-119 (2 trials) | ~0.3 | ~24/24 |
+| brain, gens 150-200 (2 trials) | ~1.4, swinging 0.4-2.5 between neighbours | ~16/24 |
+| brain, gens 290-300 (4 trials) | **2.75-3.63** (gen 300: 3.58) | 4-9/24 |
+
+Against the bare reflex it only matches the brainless chaser (7.25 vs 7.67 kills on
+12 seeds): chasing is already enough against fish that do not coordinate. Everything it
+learned is about beating the *school*.
+
+In the page's actual setting (45 champion fish, schooling on, 8 seeds × 60s):
+
+| shark | fish eaten per 60s | starvations per 60s |
+|---|---:|---:|
+| brainless chaser | 2.8 / 45 | — (cannot starve) |
+| brain gen 300 | **18.0 / 45** | 0.9 |
+
+Going from 2 to 4 trials was what made progress stick: before, the per-generation
+champion was chosen largely by luck, exactly as in finding #2.
+
+### Follow-up: ecosystem mode, frame rate, fish brain panel
+
+- **"Fish count not updating" in continuous life.** The colony sat at the 70-fish
+  `maxPopulation` cap. Two reasons:
+  - Breeding energy built up at full rate right up to the cap, so adults sat on stored
+    pregnancies and replaced every fish eaten within a tick.
+  - Every adult started on zero energy, so they bred in lockstep, jumping 41 → 70 at
+    once.
+
+  Breeding is now **logistic**: each adult has a per-tick chance of
+  `dt × (1 − N/max) / breedEnergy`. The mean rate in an empty tank is unchanged, but
+  there is no memory, so there are no bursts and no instant refills. Measured in Chrome:
+  the population now moves between ~55 and ~68 instead of pinning at 70. The HUD
+  **alive** number flashes red on a loss and green on a birth, and there is a new
+  **eaten** counter.
+- **Dead fish were never removed in continuous mode.** 108 corpses built up after five
+  minutes. They were drawn every frame and walked by every loop over `world.fish`. Now
+  they are cleared after `CONFIG.life.corpseSeconds` (8s), using `fish.diedAt`.
+- **Blur with many fish = low frame rate**, measured at 11fps (92ms frames) at 70 fish,
+  DPR 2. The causes, all fixed:
+  - Fish wakes were ~1,200 separate strokes per frame. They are now 4 batched paths.
+  - The sea gradient and the full-screen vignette were re-rasterised every frame, costing
+    ~21ms of real frame time. They are now one cached layer; the vignette sits under the
+    animals.
+  - The simulation budget was checked only every 16 ticks, at ~1ms per tick.
+  - Shark self-training now waits whenever the last frame took more than 26ms.
+  
+  Result: 32ms frames running at 20× (was 80-92ms) in headless software rendering.
+  **Measure canvas cost with real frame intervals, not JS timers:** Chrome rasterises
+  after the script returns, so `performance.now()` around draw calls hid most of it.
+- **Fish brain panel is never empty.** With no fish under the cursor it shows the
+  largest pack's scout, ringed in the tank. `BrainView.emphasis` (1.6 for fish, 1 for the
+  shark) draws its thinner, weaker graph as boldly as the shark's.
+
+## Earlier update: multi-step escape planning (social-v2, 2026-09-21)
 
 Fish now compare a 0.48s initial dodge with alternative exit turns over a 1.92s
 horizon. Close encounters also consider braking to 60% thrust before accelerating.
@@ -95,7 +208,8 @@ node train.js --clones 8 --gens 40 --pop 40 --secs 45
 node train.js --gens 100                  # solo duelist instead of a shoal
 
 # Tests
-node tests/run-all.js                     # 127 assertions
+node train-shark.js --gens 100            # train the shark brain, resumes
+node tests/run-all.js                     # 192 assertions
 ```
 
 ---
@@ -113,7 +227,9 @@ js/genome.js       Genome + Innovation (NEAT-lite: brains that GROW). The defaul
 js/evolution.js    Fitness, tournament, crossover, speciation, diversity metrics
 js/fish.js         Body + think(). The brain plugs in here.
 js/schooling.js    Packs, alpha election, perception, alarms, memory, escape planner
-js/shark.js        Predator. Deliberately brainless — see "The shark" below.
+js/sharkbrain.js   Shark senses (8) + SharkBrain, a fixed 8-6-2 net. Optional.
+js/shark.js        Predator. Brainless by default; think() when a brain is set
+js/sharktrainer.js SharkTrainer (shark self-training) + SharkHistory file format
 js/world.js        The tank. Owns state, advances it, NEVER draws.
 js/render.js       Draws. NEVER mutates. Top-down view.
 js/brainview.js    The Stage 6 inspector: draws any graph(), reads its arithmetic
@@ -121,6 +237,7 @@ js/chart.js        Fitness + parameter count per generation
 js/persist.js      Brain <-> JSON, with validation
 js/main.js         The loop, view state, all DOM wiring
 train.js           Offline trainer. This is where real learning happens.
+train-shark.js     Offline SHARK trainer -> champions/shark-best.js
 tests/             8 suites + run-all.js
 champions/         best.json (solo), best-shoal8.json, best.js (page loads this),
                    archive/ (every improvement, never overwritten), history.json
@@ -284,8 +401,9 @@ Kept on purpose. They are in `PLAN.md` next to the reasoning that produced them.
    physics (105 vs 90 px/s), not intelligence; its one weakness is its 66px turning circle
    against the fish's 30px, which is exactly what the champion learned to exploit. Keeping
    it fixed also preserves the measuring stick: every number in `PLAN.md` is comparable
-   across stages *because* the thing being escaped never changed. **Do not give it a brain
-   without asking.**
+   across stages *because* the thing being escaped never changed. **Update 2026-09-21:** the
+   user asked for a brain; see the shark-brain section at the top. The brainless shark
+   is still the default everywhere except the page.
 5. **Kin senses (`senses.neighbours`) are built and off.** Turning them on changes
    `Senses.COUNT`, which invalidates every saved champion — `Persist.fromJSON` will refuse
    them with a clear message, which is by design.
@@ -363,9 +481,9 @@ failed for exactly this reason.
 4. **Lifetime learning.** Everything here is learned *between* generations. Hebbian or
    neuromodulated plasticity would let a fish adapt *within* its own life. This is the
    largest remaining architectural jump, and the biggest amount of work.
-5. **Co-evolving the shark.** Deliberately not done — the user asked for a brainless
-   shark, and a fixed predator is also what keeps every number in `PLAN.md` comparable
-   across stages.
+5. **Co-evolving the shark.** The shark now has a brain, but it trains against a *fixed*
+   champion fish. True co-evolution (both sides training at once) is still not done.
+   Numbers taken with the brained shark are not comparable with the rest of `PLAN.md`.
 
 ---
 

@@ -1,6 +1,6 @@
 const fs = require('fs'), vm = require('vm'), path = require('path');
 const root = process.argv[2] || path.join(__dirname, '..');
-const files = ['config','rng','vec','senses','brain','genome','evolution','fish','schooling','shark','world','persist','render'];
+const files = ['config','rng','vec','senses','brain','genome','evolution','fish','schooling','sharkbrain','shark','world','persist','render'];
 const src = files.map(n => fs.readFileSync(path.join(root, 'js', n + '.js'), 'utf8')).join('\n');
 
 // Find whichever champion is actually on disk. Suites used to hard-code one

@@ -39,6 +39,7 @@ const VIEW_SIZE = {
   sea:   { w: CONFIG.tank.w, h: CONFIG.tank.h },
   chart: { w: CONFIG.tank.w, h: 236 },
   brain: { w: 408, h: 452 },
+  sharkBrain: { w: 470, h: 300 },
 };
 
 // Moving the window between monitors with different pixel densities changes
@@ -55,6 +56,9 @@ function fitAllCanvases() {
   fitCanvas(chartCanvas, chartCtx, VIEW_SIZE.chart.w, VIEW_SIZE.chart.h);
   if (typeof brainCanvas !== 'undefined') {
     fitCanvas(brainCanvas, brainCtx, VIEW_SIZE.brain.w, VIEW_SIZE.brain.h);
+  }
+  if (typeof sharkCanvas !== 'undefined') {
+    fitCanvas(sharkCanvas, sharkCtx, VIEW_SIZE.sharkBrain.w, VIEW_SIZE.sharkBrain.h);
   }
 }
 window.addEventListener('resize', fitAllCanvases);
@@ -175,13 +179,29 @@ function frame(now) {
       // is not free, and calling it 4000 times a frame would itself become the
       // cost we are trying to control.
       ticksThisSecond++;
-      if ((++steps & 15) === 0 && performance.now() >= until) break;
+      // Every step, not every 16th. MEASURED: at 70 fish one tick costs ~1ms,
+      // so checking every 16 steps let a "9ms" budget run to 16ms or more
+      // before the first check. performance.now() costs microseconds.
+      steps++;
+      if (performance.now() >= until) break;
     }
 
     // Whatever could not be simulated inside the budget is dropped rather than
     // queued. Carrying it forward would make the next frame slower still - the
     // spiral of death, one level up.
     if (accumulator >= CONFIG.sim.dt) accumulator = 0;
+  }
+
+  // The shark teaches itself in the gaps: a few milliseconds of evaluation
+  // tanks per frame, never touching the visible world. It pauses with the page,
+  // and it gives way whenever the last frame was already slow - the tank you
+  // are watching comes first, background training second.
+  const lastFrameMs = now - (frame.prev || now);
+  frame.prev = now;
+  sharkState.yielding = lastFrameMs >= 26;
+  if (!paused && sharkState.training && !sharkState.yielding) {
+    try { ensureSharkTrainer().runFor(CONFIG.sharkBrain.train.pageBudgetMs); }
+    catch (err) { sharkState.training = false; syncSharkControls(); reportUiError(err); }
   }
 
   // Sample the achieved rate about once a second. 60 ticks is one simulated
@@ -222,6 +242,7 @@ function frame(now) {
     updateArithmetic();
     updateMutationLog();
     updateTrainingNote();
+    updateSharkPanel();
   } catch (err) {
     reportUiError(err);
   }
@@ -264,7 +285,22 @@ function refreshFocus() {
   if (view.pinned && view.pinned.alive) { view.focused = view.pinned; return; }
   if (view.pinned) view.pinned = null;            // it got eaten
   view.focused = mouse.inside ? world.nearestLivingFish(mouse.x, mouse.y) : null;
+  view.subject = view.focused || defaultSubject();
 }
+
+// The brain panel should never sit empty. With no fish under the cursor it
+// shows the scout of the largest pack (or any living fish), marked in the tank
+// with a ring so it is clear whose brain is on screen.
+function defaultSubject() {
+  let best = null;
+  for (const p of world.packs || []) {
+    if (p.alpha && p.alpha.alive && (!best || p.members.length > best.members.length)) best = p;
+  }
+  if (best) return best.alpha;
+  for (const f of world.fish) if (f.alive) return f;
+  return null;
+}
+function brainSubject() { return view.focused || view.subject || null; }
 
 // Format a number the way an arithmetic sheet would: always show the sign, so
 // columns line up and a negative never hides.
@@ -311,7 +347,7 @@ function buildSensePanel() {
 }
 
 function updateSensePanel() {
-  const f = view.focused;
+  const f = brainSubject();
   const social = typeof Schooling !== 'undefined' && Schooling.active(world);
 
   // Each line hides itself when it has nothing to say - an empty element
@@ -331,7 +367,9 @@ function updateSensePanel() {
       ' · turn ' + f.lastTurn.toFixed(2) + ' · thrust ' + f.lastThrust.toFixed(2)
     : '';
   document.getElementById('focus-note').textContent =
-    f ? 'reading the ringed fish' : 'move the mouse over the tank';
+    !f ? 'no fish alive'
+      : view.focused ? (view.pinned ? 'pinned fish' : 'reading the ringed fish')
+      : 'showing ' + (f.isAlpha ? 'α' + f.packId + ' (scout)' : 'a fish') + ' · hover or click another';
 
   for (let i = 0; i < senseRows.length; i++) {
     const v = f ? f.senses[i] : 0;
@@ -348,6 +386,8 @@ function updateSensePanel() {
 // -----------------------------------------------------------------------------
 const brainCanvas = document.getElementById('brain');
 const brainCtx = brainCanvas.getContext('2d');
+// Bolder than the default: see BrainView.emphasis.
+BrainView.emphasis = 1.6;
 
 
 // Clicking the sea PINS a fish, so the panel stops following your cursor and
@@ -381,7 +421,7 @@ brainCanvas.addEventListener('mousemove', (e) => {
 brainCanvas.addEventListener('mouseleave', () => { BrainView.hover = null; });
 
 function updateBrainView() {
-  const f = view.focused;
+  const f = brainSubject();
   document.getElementById('brainwrap').classList.toggle('idle', !f || !f.net);
   if (!f || !f.net) return;
 
@@ -405,7 +445,7 @@ function updateBrainView() {
 // -----------------------------------------------------------------------------
 function updateArithmetic() {
   const host = document.getElementById('math');
-  const f = view.focused;
+  const f = brainSubject();
 
   // Default to the turn output, so there is always something to read.
   let id = view.selectedNode;
@@ -492,7 +532,8 @@ function updateTrainingNote() {
   const el = document.getElementById('training-note');
   if (!el) return;
 
-  const brain = (view.focused && view.focused.net) || world.fish[0].net;
+  const subj = brainSubject();
+  const brain = subj && subj.net;
   if (!brain) { el.textContent = ''; return; }
 
   const params = brain.paramCount();
@@ -510,7 +551,9 @@ function updateTrainingNote() {
     el.textContent = world.extinct
       ? 'EXTINCT — every fish died. Press restart to seed a new colony.'
       : live.length + ' alive (' + young + ' juvenile) · ' + (world.births || 0) +
-        ' born · deepest lineage ' + (world.deepestGeneration || 1) +
+        ' born · ' + world.totalKills + ' eaten' +
+        ' · habitat holds ' + CONFIG.life.maxPopulation + ' (breeding slows as it fills)' +
+        ' · deepest lineage ' + (world.deepestGeneration || 1) +
         ' · oldest ' + oldest.toFixed(0) + 's · ' + params + ' params';
     return;
   }
@@ -533,12 +576,27 @@ function updateTrainingNote() {
     (sum ? ' · last mean ' + sum.mean.toFixed(1) + 's' : '');
 }
 
+// A count that changes by one in a crowd of seventy is easy to miss, so the
+// number flashes: red when a fish is lost, green when one is born.
+let lastAlive = null;
+function flashCount(alive) {
+  if (lastAlive !== null && alive !== lastAlive) {
+    const el = document.getElementById('alive');
+    el.classList.remove('count-down', 'count-up');
+    void el.offsetWidth;                    // restart the animation
+    el.classList.add(alive < lastAlive ? 'count-down' : 'count-up');
+  }
+  lastAlive = alive;
+}
+
 function updateHud() {
   const sum = world.lastSummary;
   const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
 
   set('gen', world.generation);
-  set('alive', world.aliveCount());
+  const alive = world.aliveCount();
+  set('alive', alive);
+  flashCount(alive);
   // The denominator depends on which world we are in. Generational mode
   // respawns a fixed cohort, so it is fish.count. Continuous mode breeds up to
   // a ceiling, so it is maxPopulation - showing 70/45 was the old denominator
@@ -562,12 +620,14 @@ function updateHud() {
   for (const f of world.fish) if (f.alive && f.maturity && f.maturity() < 1) young++;
   set('young', young);
   set('births', world.births || 0);
+  set('eaten', world.totalKills);
   set('shoal', Evolution.shoaling(world.fish).toFixed(0) + 'px');
   set('diversity', Evolution.geneticSpread(world.fish).toFixed(3));
 
   // Brain size, live from the focused fish when there is one - so growth is
   // visible immediately rather than only when a generation ends.
-  const shown = view.focused && view.focused.net ? view.focused.net : world.fish[0].net;
+  const subj = brainSubject();
+  const shown = subj && subj.net;
   set('params', shown ? shown.paramCount() : 0);
   set('hidden', shown ? shown.hiddenCount() : 0);
 
@@ -577,6 +637,8 @@ function updateHud() {
     ev.className = CONFIG.evolution.enabled ? 'on' : 'off';
   }
   set('mode', MODE_LABEL[world.mode]);
+  const sb = world.sharkBrain && selectedSharkEntry();
+  set('shark-hud', sb ? 'brain gen ' + sb.generation : 'brainless');
 
   const paused_el = document.getElementById('paused');
   if (paused_el) paused_el.style.visibility = paused ? 'visible' : 'hidden';
@@ -602,6 +664,7 @@ window.addEventListener('keydown', (e) => {
     CONFIG.evolution.enabled = !CONFIG.evolution.enabled;
     syncEvolveButtons();
   }
+  if (e.code === 'KeyK') toggleSharkBrain();
   if (e.code === 'KeyL') {
     view.showLineage = !view.showLineage;
   }
@@ -621,7 +684,8 @@ window.addEventListener('keydown', (e) => {
   // it advances the COMPUTATION, so you watch numbers propagate left to right
   // across the diagram the way water fills a system of pipes.
   if (e.code === 'KeyN') {
-    const g = view.focused && view.focused.net ? view.focused.net.graph() : null;
+    const subj = brainSubject();
+    const g = subj && subj.net ? subj.net.graph() : null;
     const max = g ? g.maxDepth : 0;
     view.revealDepth = view.revealDepth >= max ? -1 : view.revealDepth + 1;
   }
@@ -844,9 +908,234 @@ document.getElementById('btn-random').addEventListener('click', () => {
 });
 
 
+// -----------------------------------------------------------------------------
+// THE SHARK'S BRAIN
+// -----------------------------------------------------------------------------
+// One button switches it on and off; the dropdown picks WHICH trained
+// generation drives the shark ("newest" follows self-training as it goes).
+// Off restores the brainless chaser every number in PLAN.md was measured
+// against. On brings the survival instinct with it: 10s without a meal and the
+// shark starves, lies there a moment, and a fresh one takes its place.
+//
+// Self-training runs in the background against clones of the champion fish
+// (js/sharktrainer.js). Each finished generation's champion is added to the
+// dropdown and kept in this browser; train-shark.js does the same offline and
+// much faster, writing champions/shark-best.js.
+// -----------------------------------------------------------------------------
+const sharkCanvas = document.getElementById('sharkbrain');
+const sharkCtx = sharkCanvas.getContext('2d');
+
+// A second BrainView with its own layout and hover state. The inspector keeps
+// laid-out positions on itself for hit-testing, so two diagrams sharing one
+// object would overwrite each other every frame.
+const SharkView = Object.assign(Object.create(BrainView), {
+  nodes: [], edges: [], hover: null, t: 0, hoveredNode: null, hoveredEdge: null, emphasis: 1,
+});
+
+sharkCanvas.addEventListener('mousemove', (e) => {
+  const r = sharkCanvas.getBoundingClientRect();
+  SharkView.hover = {
+    x: (e.clientX - r.left) * (VIEW_SIZE.sharkBrain.w / r.width),
+    y: (e.clientY - r.top) * (VIEW_SIZE.sharkBrain.h / r.height),
+  };
+});
+sharkCanvas.addEventListener('mouseleave', () => { SharkView.hover = null; });
+
+const SHARK_KEY = 'fish-shark-shark-history';
+const sharkState = {
+  enabled: false,
+  training: true,
+  selected: 'latest',   // or a generation number
+  history: [],          // [{ generation, score, kills, mean, brain }]
+  trainer: null,
+  lastBrain: null,      // what the diagram shows while no shark is alive
+};
+
+// The trainer's file and this browser's own continuation of it - whichever was
+// saved more recently wins. Both go through SharkHistory, which skips any
+// entry that no longer fits the current sense layout.
+function loadSharkHistory() {
+  const file = typeof window.SHARK_HISTORY !== 'undefined' ? window.SHARK_HISTORY : null;
+  let local = null;
+  try { const raw = localStorage.getItem(SHARK_KEY); if (raw) local = JSON.parse(raw); }
+  catch (err) { /* storage unavailable */ }
+  const pick = local && (!file || String(local.saved) > String(file.saved)) ? local : file;
+  sharkState.history = SharkHistory.fromJSON(pick);
+  if (!sharkState.history.length) {
+    // Nothing trained yet: generation 0 is a random brain. Self-training
+    // improves it from there.
+    sharkState.history.push({ generation: 0, score: 0, kills: 0, mean: 0,
+                              brain: SharkBrain.random(new Rng(CONFIG.seed + 7)) });
+  }
+}
+
+function saveSharkHistory() {
+  try {
+    localStorage.setItem(SHARK_KEY, JSON.stringify({
+      version: 1,
+      saved: new Date().toISOString(),
+      generations: SharkHistory.thin(sharkState.history, 120).map(SharkHistory.entryToJSON),
+    }));
+  } catch (err) { /* storage unavailable - training still works this session */ }
+}
+
+function selectedSharkEntry() {
+  const h = sharkState.history;
+  if (!h.length) return null;
+  if (sharkState.selected === 'latest') return h[h.length - 1];
+  return h.find(e => e.generation === sharkState.selected) || h[h.length - 1];
+}
+
+// Put the chosen brain (or none) into the tank. The world owns it from here:
+// every respawn and every new generation's shark gets a clone.
+function applySharkBrain() {
+  const entry = sharkState.enabled ? selectedSharkEntry() : null;
+  CONFIG.sharkBrain.enabled = !!entry;
+  world.setSharkBrain(entry ? entry.brain : null);
+  syncSharkControls();
+}
+
+function toggleSharkBrain() {
+  sharkState.enabled = !sharkState.enabled;
+  applySharkBrain();
+  flash(sharkState.enabled
+    ? 'shark brain ON · generation ' + selectedSharkEntry().generation + ' · it starves after ' +
+      CONFIG.sharkBrain.starveSeconds + 's without a meal'
+    : 'shark brain OFF · back to the brainless chaser');
+}
+
+function ensureSharkTrainer() {
+  if (sharkState.trainer) return sharkState.trainer;
+  const fish = championBrain() || world.fish[0].net;
+  const last = sharkState.history[sharkState.history.length - 1];
+  sharkState.trainer = new SharkTrainer({
+    fishBrain: fish.clone(),
+    startBrain: last.generation > 0 ? last.brain : null,
+    startGeneration: last.generation,
+    seed: 90210 + last.generation,
+    onGeneration: onSharkGeneration,
+  });
+  return sharkState.trainer;
+}
+
+function onSharkGeneration(record) {
+  sharkState.history.push(record);
+  if (sharkState.history.length > 400) sharkState.history = SharkHistory.thin(sharkState.history, 300);
+  saveSharkHistory();
+  rebuildSharkSelect();
+  // "Newest" means newest: the live shark picks up the new brain at once,
+  // keeping its body and its hunger.
+  if (sharkState.enabled && sharkState.selected === 'latest') world.setSharkBrain(record.brain);
+}
+
+function rebuildSharkSelect() {
+  const sel = document.getElementById('shark-gen');
+  const h = sharkState.history;
+  const newest = h[h.length - 1];
+  const opts = ['<option value="latest">newest — gen ' + newest.generation +
+                ' (follows training)</option>'];
+  for (let i = h.length - 1; i >= 0; i--) {
+    const e = h[i];
+    opts.push('<option value="' + e.generation + '">gen ' + e.generation +
+              (e.generation === 0 ? ' · untrained' : ' · ' + e.kills.toFixed(1) + ' kills/trial') +
+              '</option>');
+  }
+  sel.innerHTML = opts.join('');
+  sel.value = String(sharkState.selected);
+  if (sel.value === '') { sharkState.selected = 'latest'; sel.value = 'latest'; }
+}
+
+function syncSharkControls() {
+  const b = document.getElementById('btn-shark-brain');
+  b.textContent = sharkState.enabled ? 'SHARK BRAIN: ON' : 'SHARK BRAIN: OFF (brainless chaser)';
+  b.classList.toggle('on', sharkState.enabled);
+  const t = document.getElementById('btn-shark-train');
+  t.textContent = sharkState.training ? 'SELF-TRAINING: ON' : 'SELF-TRAINING: OFF';
+  t.classList.toggle('on', sharkState.training);
+  document.getElementById('shark-gen').disabled = !sharkState.enabled;
+}
+
+document.getElementById('btn-shark-brain').addEventListener('click', toggleSharkBrain);
+
+document.getElementById('btn-shark-train').addEventListener('click', () => {
+  sharkState.training = !sharkState.training;
+  syncSharkControls();
+});
+
+document.getElementById('shark-gen').addEventListener('change', (e) => {
+  sharkState.selected = e.target.value === 'latest' ? 'latest' : Number(e.target.value);
+  applySharkBrain();
+  flash('shark now runs the brain from generation ' + selectedSharkEntry().generation);
+});
+
+function updateSharkPanel() {
+  const s = world.sharks[0];
+  const brained = !!world.sharkBrain;
+  const starve = CONFIG.sharkBrain.starveSeconds;
+
+  // --- hunger: the survival instinct ---
+  const bar = document.getElementById('hunger-bar');
+  const left = brained && s ? V.clamp(1 - s.hunger / starve, 0, 1) : 0;
+  bar.style.transform = 'scaleX(' + left.toFixed(3) + ')';
+  bar.style.background = 'hsl(' + Math.round(120 * left) + ', 70%, 55%)';
+  document.getElementById('hunger-val').textContent = !brained ? 'never starves'
+    : s ? (starve - s.hunger).toFixed(1) + 's left' : 'starved';
+
+  // --- this tank ---
+  const entry = selectedSharkEntry();
+  let status;
+  if (!brained) {
+    status = 'Brainless chaser: aims at the nearest fish and swims flat out. No hunger, no learning. ' +
+             'Turn the brain on to let a trained network steer.';
+  } else if (!s) {
+    const next = world.sharkRespawns.length ? Math.max(0, world.sharkRespawns[0] - world.time) : 0;
+    status = 'Starved — a new shark arrives in ' + next.toFixed(1) + 's. Starvations so far: ' + world.starvations + '.';
+  } else {
+    status = 'Generation ' + entry.generation + ' brain · ' + s.kills + ' eaten this life · ' +
+             'turn ' + signed(s.lastTurn) + ' · speed ' + Math.round(100 * s.speed / CONFIG.shark.maxSpeed) + '% · ' +
+             'starved ' + world.starvations + '× so far';
+  }
+  document.getElementById('shark-status').textContent = status;
+
+  // --- self-training ---
+  const tr = sharkState.trainer;
+  const newest = sharkState.history[sharkState.history.length - 1];
+  let note;
+  if (!sharkState.training) {
+    note = 'Self-training paused. Newest trained brain: generation ' + newest.generation + '.';
+  } else if (tr) {
+    const p = tr.progress();
+    note = 'Training generation ' + p.generation + ' against champion fish · candidate ' +
+           p.candidate + '/' + p.population + ' · trial ' + p.trial + '/' + p.trials +
+           (tr.reflexTrial(p.trial - 1) ? ' (reflex-only fish)' : ' (schooling fish)') +
+           (tr.lastRecord ? ' · last generation’s best: ' + tr.lastRecord.kills.toFixed(1) + ' kills/trial' : '') +
+           (sharkState.yielding ? ' · waiting: the tank needs this frame' : '');
+  } else {
+    note = 'Self-training starts with the next frame.';
+  }
+  document.getElementById('shark-train-note').textContent = note;
+
+  // --- the diagram: the live shark's own network, pulsing ---
+  if (s && s.brain) sharkState.lastBrain = s.brain;
+  const shown = brained ? (s && s.brain) || sharkState.lastBrain || entry.brain : entry.brain;
+  document.getElementById('sharkbrainwrap').classList.toggle('idle', !brained);
+  SharkView.draw(sharkCtx, shown, VIEW_SIZE.sharkBrain.w, VIEW_SIZE.sharkBrain.h,
+                 { revealDepth: -1, selectedId: null });
+  document.getElementById('sharkmeta').textContent =
+    (brained ? 'driving the shark' : 'brain off — showing generation ' + entry.generation + ', not steering') +
+    ' · ' + shown.paramCount() + ' params · 8 senses → ' + shown.hiddenCount() + ' hidden → turn, speed';
+}
+
+
 fitAllCanvases();
 buildSensePanel();
 loadChampion(false);
 syncEvolveButtons();
+loadSharkHistory();
+rebuildSharkSelect();
+// The page starts with the brain ON so the new behaviour is visible at once.
+// CONFIG.sharkBrain.enabled stays false for the tests and trainers.
+sharkState.enabled = true;
+applySharkBrain();
 requestAnimationFrame(frame);
 

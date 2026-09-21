@@ -18,7 +18,7 @@ const fs = require('fs');
 const ROOT = path.join(__dirname, '..');
 const SUITES = ['stage1_test', 'stage2_test', 'stage3_test', 'stage4_test',
                 'stage5_test', 'stage67_test', 'stage8_test', 'memory_test', 'life_test', 'regress', 'schooling_test', 'planner_test',
-                'runtime_test', 'storage_test', 'presentation_test'];
+                'runtime_test', 'storage_test', 'presentation_test', 'shark_brain_test'];
 
 let pass = 0, fail = 0;
 console.log('');

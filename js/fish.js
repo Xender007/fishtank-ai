@@ -29,7 +29,6 @@ class Fish {
     // so this is what 'generation' means: how many ancestors deep this fish
     // is, which keeps climbing while the clock never resets.
     this.generation = 1;
-    this.energy = 0;           // spent on offspring; see World.breedContinuously
     this.age = 0;              // seconds survived. In Stage 4 this becomes
                                // FITNESS - the number evolution optimises.
 

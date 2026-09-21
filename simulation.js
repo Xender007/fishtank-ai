@@ -4,9 +4,9 @@
 const fs = require('fs');
 const path = require('path');
 const FILES = ['config','rng','vec','senses','brain','genome','evolution',
-  'fish','schooling','shark','world','persist'];
+  'fish','schooling','sharkbrain','shark','world','sharktrainer','persist'];
 function createSimulation() {
   const src = FILES.map(name => fs.readFileSync(path.join(__dirname, 'js', name + '.js'), 'utf8')).join('\n');
-  return new Function(src + '\nreturn { CONFIG, World, Genome, Evolution, Innovation, Rng, Senses, Persist };')();
+  return new Function(src + '\nreturn { CONFIG, World, Genome, Evolution, Innovation, Rng, Senses, Persist, SharkBrain, SharkSenses, SharkTrainer, SharkHistory };')();
 }
 module.exports = { createSimulation, FILES };

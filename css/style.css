@@ -635,3 +635,126 @@ canvas { display: block; }
 .legend.dim { opacity: 0.66; }
 #focus-note { opacity: 0.8; }
 .hint { opacity: 0.78; }
+
+/* ===========================================================================
+   Shark brain panel - under the tank
+   =========================================================================== */
+#sharkpanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 470px;
+  gap: 12px;
+  width: 900px;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  background: #0a1a26;
+  border: 1px solid #3a1f2b;
+  border-left: 3px solid #f2879a;
+  border-radius: 6px;
+}
+
+#sharkcontrols {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+#sharkcontrols h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f2879a;
+}
+
+#sharkcontrols button {
+  min-height: 44px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  color: #9fc4d6;
+  background: #0f2b3b;
+  border: 1px solid #1d4a63;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms, color 120ms;
+}
+#sharkcontrols button:hover { background: #14384c; border-color: #2f7d9b; }
+#sharkcontrols button.toggle::before { content: '\25CB  '; opacity: 0.6; }
+#sharkcontrols button.toggle.on::before { content: '\25CF  '; opacity: 1; }
+#sharkcontrols button.toggle.on { color: #ffb4c0; border-color: #9e364c; background: #2a1520; }
+#sharkcontrols button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.sharkgen { font-size: 10.5px; color: #9fc4d6; opacity: 0.85; margin-bottom: -4px; }
+
+#shark-gen {
+  min-height: 40px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 11px;
+  color: #d8ecf5;
+  background: #06222f;
+  border: 1px solid #1d4a63;
+  border-radius: 4px;
+}
+#shark-gen:disabled { opacity: 0.45; }
+
+.hunger {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+  color: #9fc4d6;
+}
+.hunger b { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 74px; text-align: right; }
+.hunger-track {
+  height: 10px;
+  background: #06222f;
+  border-radius: 2px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(47, 125, 155, 0.35);
+}
+#hunger-bar {
+  height: 100%;
+  width: 100%;
+  background: #62d68c;
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform 90ms linear;
+}
+
+#shark-status     { border-left-color: #f2879a; }
+#shark-train-note { border-left-color: #9085e9; }
+
+#sharkbrainwrap { line-height: 0; min-width: 0; }
+#sharkmeta { line-height: 1.4; font-size: 10.5px; opacity: 0.75; margin-bottom: 6px; }
+#sharkbrain { width: 100%; height: auto; display: block; border-radius: 4px; }
+#sharkbrainwrap.idle #sharkbrain { opacity: 0.35; }
+
+@media (max-width: 960px) {
+  #sharkpanel { grid-template-columns: 1fr; }
+}
+
+/* The fish's brain gets the same treatment as the shark's: an accent card that
+   reads as "this is the live network", in the prey colour instead of the
+   predator's. */
+#brainwrap {
+  border-left: 3px solid #6fe3c6 !important;
+  background: #081722 !important;
+}
+#brainmeta {
+  color: #6fe3c6;
+  opacity: 0.95 !important;
+  border-left: 3px solid #6fe3c6 !important;
+}
+#brainwrap.idle #brain { opacity: 0.35; }
+
+/* The alive count flashes on every change: red for a loss, green for a birth. */
+@keyframes count-down { from { color: #ff6f86; text-shadow: 0 0 10px rgba(255, 111, 134, 0.8); } }
+@keyframes count-up   { from { color: #6fe39a; text-shadow: 0 0 10px rgba(111, 227, 154, 0.8); } }
+#alive.count-down { animation: count-down 900ms ease-out; }
+#alive.count-up   { animation: count-up 900ms ease-out; }

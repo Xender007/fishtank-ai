@@ -1,10 +1,86 @@
 # Learning Neural Networks by Evolving Fish That Escape a Shark
 
-> Current implementation update (2026-09-21): the fish now use coordinated packs
+> Latest (2026-09-21): the shark has an OPTIONAL brain, by explicit request — see
+> "Stage 9, by request" below. It is off for every test and trainer.
+>
+> Earlier update (2026-09-21): the fish now use coordinated packs
 > and a social escape planner around the saved neural reflex. The predator still
 > has no brain; the requested three-circle correction is its only new rule.
 > Earlier stages below are historical plans/findings, not instructions to stop
 > the current work or to implement predator learning. See the latest entry below.
+
+## Stage 9, by request — the shark gets a brain (2026-09-21)
+
+The user lifted the long-standing "no shark brain" instruction and asked for: a brain; one
+survival instinct (if it cannot eat a fish within 10 seconds, it dies); automatic
+self-improvement by training against champion fish; one button to turn the brain on and
+off; a choice of which generation's brain drives the shark; and its neural graph on
+screen.
+
+**Design.** A fixed 8 → 6 → 2 network (68 parameters), Stage 3 style, kept separate from
+the fish genome so the two species can never share innovation numbers. Senses: angle and
+closeness of the nearest fish, the fish's sideways **drift** across the line of sight (so
+it can aim where the fish is going), angle to and size of the local crowd, wall ahead,
+**hunger** and its own speed. Outputs: turn, plus speed between 50% and 100%. It moves
+under the same turn-rate and top-speed limits as always. Slowing down is its only new
+physical lever, and at half speed its turning circle halves from 66px to 33px.
+
+**The instinct.** Hunger counts seconds since the last meal. At 10s the shark dies and is
+removed from the tank, so fish stop reacting to it. It lies there as a greyed "starved"
+corpse and a replacement arrives 1.5s later. Hunger is also an input, so the brain can
+feel the clock running out.
+
+**Self-training.** The same evolutionary loop as the fish, pointed the other way. Each
+candidate hunts clones of the champion fish alone. The score is kills, plus a small bonus
+for staying close to the nearest fish, worth less than one catch. Every candidate in a
+generation faces the same seeds, and elites are re-scored each generation. The page runs
+this in 4ms slices per frame; `node train-shark.js` runs it flat out.
+
+**The brainless measuring stick is untouched.** `CONFIG.sharkBrain.enabled` is false for
+every test and trainer; only the page switches it on. So every earlier table in this file
+still means what it says. Numbers taken with the brained shark belong to a new series.
+
+### What was measured
+
+1. **The starvation clock nearly made the task unlearnable.** Against 12 champion fish
+   running the schooling planner, even the brainless chaser averages about one catch per
+   30s. Random brains starved with zero kills, every score tied, and selection had nothing
+   to work with. It is the "too hard" failure from Stage 4, from the predator's side.
+   The fix is **mixed opponents**: half the trials face the champion's bare neural reflex,
+   which is catchable and gives a gradient; the other half face the schooling fish the
+   page actually shows.
+2. **The determinism test found two trainer bugs.** One trial's opponent setting leaked
+   into the next, so for a while *every* trial was reflex-only. And `step()` ran past the
+   end of a generation. Both are fixed. The test now checks the opponent from inside the
+   running tank, not from the config.
+3. **Finding #2, from the other side.** With 2 trials per candidate, held-out kills swung
+   from 0.4 to 2.3 between *neighbouring* generations, so the per-generation champion was
+   chosen partly by luck. Trials went up to 4.
+
+**Results.** 200 generations with 2 trials, then 100 more with 4 (population 24; about
+6s per generation offline). Held out against **schooling** champion fish (24 seeds never
+used in training, 12 fish, 20s, and the brainless chaser held to the same 10s rule):
+
+| shark | kills / 20s | starved |
+|---|---:|---:|
+| brainless chaser | 0.38 | 23/24 |
+| brain, gens 101-119 (2 trials) | ~0.3 | ~24/24 |
+| brain, gens 150-200 (2 trials) | ~1.4, swinging 0.4-2.5 between neighbours | ~16/24 |
+| brain, gens 290-300 (4 trials) | **2.75-3.63** (gen 300: 3.58) | 4-9/24 |
+
+Against the bare reflex it only matches the brainless chaser (7.25 vs 7.67 kills on
+12 seeds): chasing is already enough against fish that do not coordinate. Everything it
+learned is about beating the *school*.
+
+In the page's actual setting (45 champion fish, schooling on, 8 seeds × 60s):
+
+| shark | fish eaten per 60s | starvations per 60s |
+|---|---:|---:|
+| brainless chaser | 2.8 / 45 | — (cannot starve) |
+| brain gen 300 | **18.0 / 45** | 0.9 |
+
+Going from 2 to 4 trials was what made progress stick: before, the per-generation
+champion was chosen largely by luck, exactly as in finding #2.
 
 ## Multi-step escape planner — social-v2, 2026-09-21
 

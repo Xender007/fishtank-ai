@@ -69,6 +69,40 @@ const CONFIG = {
     circleBreakSeconds: 1.4,
   },
 
+  // The shark's OPTIONAL brain (js/sharkbrain.js). Off here, so every test,
+  // benchmark and trainer keeps facing the brainless measuring stick that all
+  // numbers in PLAN.md were taken against. The page switches it on.
+  sharkBrain: {
+    enabled: false,
+    // THE SURVIVAL INSTINCT. A brained shark that goes this long without a
+    // meal dies. It is also fed to the network as an input ("hunger"), so the
+    // brain can feel the clock running out - and it is what gives evolution
+    // its signal: a shark that cannot catch anything simply stops existing.
+    starveSeconds: 10,
+    respawnSeconds: 1.5,   // how long a starved shark lies there before a new one
+    // A brain may slow down, because turnRate is fixed in rad/s: at 50% speed
+    // its turning circle halves, from 66px to 33px - close to the fish's 30px.
+    // That is the one physical lever a thinking shark has that a brainless
+    // one never used. It still never goes faster than maxSpeed.
+    minSpeedFraction: 0.5,
+    hidden: 6,             // 8 senses -> 6 hidden -> 2 outputs = 68 parameters
+    // Self-training: each candidate brain hunts a school of champion fish.
+    train: {
+      population: 16,
+      // 4, not 2: with 2 the per-generation champion was chosen largely by luck -
+      // held-out kills swung 0.4-2.3 between neighbouring generations.
+      trials: 4,           // same seeds for every candidate in a generation
+      mixedOpponents: true, // even trials: champion reflex only. See sharktrainer.js
+      seconds: 20,         // a trial also ends early if the shark starves
+      fish: 12,            // champion clones in the evaluation tank
+      elites: 2,
+      mutationRate: 0.2,
+      mutationStrength: 0.35,
+      crossoverRate: 0.6,
+      pageBudgetMs: 4,     // per animation frame, on top of the visible tank
+    },
+  },
+
   // Social decisions surround the saved neural reflex; its seven inputs and
   // weights remain compatible. These are engineered behaviours, not claims of
   // newly evolved intelligence. Disable for the original network-only baseline.
@@ -520,17 +554,24 @@ const CONFIG = {
     babyTurn: 0.6,         // fraction of adult turn rate at birth
     babySize: 0.4,         // fraction of adult radius at birth
 
-    // A fish must be this mature before it can breed at all, then it needs
-    // this many seconds of accumulated life to pay for an egg. Breeding is a
-    // cost, not a free action, or the tank fills instantly and nothing is
-    // ever selected.
+    // A fish must be this mature before it can breed at all. After that, in an
+    // EMPTY habitat an adult has one offspring every breedEnergy seconds on
+    // average; the rate falls as the tank fills and is zero at maxPopulation
+    // (see World.breedContinuously). Breeding is slow on purpose, or the tank
+    // fills instantly and nothing is ever selected.
     breedMaturity: 0.85,
-    breedEnergy: 14,
+    breedEnergy: 14,       // mean seconds per offspring, empty habitat
     breedRange: 120,       // how far to look for a mate
 
     // Hard ceiling. Without it a good population grows until the frame rate
     // collapses, which is its own kind of extinction.
     maxPopulation: 70,
+
+    // How long an eaten fish lies on the bottom before it is cleared away.
+    // Generational mode clears the tank every round anyway; a continuous colony
+    // never does, so corpses piled up without limit - 108 of them after five
+    // minutes, every one walked by every loop over world.fish every tick.
+    corpseSeconds: 8,
 
     // Sample the population into the chart this often, since there are no
     // generation boundaries to hang a data point on any more.

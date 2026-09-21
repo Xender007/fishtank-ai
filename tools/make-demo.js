@@ -21,7 +21,7 @@ const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const FILES = ['config','rng','vec','senses','brain','genome','evolution','schooling',
-               'fish','shark','world','persist'];
+               'fish','sharkbrain','shark','world','persist'];
 
 const src = FILES.map(n => fs.readFileSync(path.join(ROOT, 'js', n + '.js'), 'utf8'))
   .join(String.fromCharCode(10));

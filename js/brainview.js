@@ -24,6 +24,11 @@ const BrainView = {
   t: 0,           // frame counter, drives the signal animation
   hoveredNode: null,
   hoveredEdge: null,
+  // How boldly to draw. The fish's network has small weights and inputs that
+  // sit at zero until a shark is in view, so at 1 it read as faint next to the
+  // dense, busy shark graph. main.js turns the fish view up; the shark's own
+  // instance keeps 1.
+  emphasis: 1,
 
   // ---------------------------------------------------------------------------
   // LAYOUT - columns by depth.
@@ -93,8 +98,9 @@ const BrainView = {
       const focused = selected !== null && selected !== undefined;
       const relevant = !focused || c.to === selected || c.from === selected;
 
-      const mag = Math.min(1, Math.abs(c.w) / 2);
-      let alpha = pending ? 0.10 : 0.26 + 0.6 * mag;
+      const E = this.emphasis;
+      const mag = Math.min(1, Math.abs(c.w) / (2 / E));
+      let alpha = pending ? 0.10 : Math.min(1, (0.26 + 0.6 * mag) * E);
       if (focused && !relevant) alpha *= 0.18;
       if (this.hoveredEdge === c) alpha = 1;
 
@@ -105,7 +111,7 @@ const BrainView = {
       } else {
         ctx.setLineDash([]);
         ctx.strokeStyle = (c.w >= 0 ? 'rgba(96, 220, 140, ' : 'rgba(255, 110, 130, ') + alpha + ')';
-        ctx.lineWidth = (0.7 + 3.4 * mag) * (this.hoveredEdge === c ? 1.6 : 1);
+        ctx.lineWidth = (0.7 * E + 3.4 * mag) * (this.hoveredEdge === c ? 1.6 : 1);
       }
 
       // MEMORY EDGES look different because they ARE different: they carry
@@ -186,7 +192,7 @@ const BrainView = {
       const isHov = this.hoveredNode && this.hoveredNode.id === n.id;
       ctx.lineWidth = isSel ? 2.2 : isHov ? 1.8 : 1;
       ctx.strokeStyle = isSel ? '#ffffff' : isHov ? 'rgba(190, 220, 235, 0.9)'
-                                                  : 'rgba(159, 196, 214, 0.4)';
+                                                  : 'rgba(159, 196, 214, ' + Math.min(0.9, 0.4 * this.emphasis) + ')';
       ctx.stroke();
 
       // Inputs are labelled on the left with their live value, outputs on the
@@ -295,7 +301,8 @@ const BrainView = {
                n.type === 0 ? 'input sensor' : 'bias ' + (n.bias >= 0 ? '+' : '') + n.bias.toFixed(3)];
     } else if (this.hoveredEdge) {
       const c = this.hoveredEdge;
-      lines = [Genome.nodeName(c.from) + ' → ' + Genome.nodeName(c.to),
+      // The shark's brain names its own nodes; the fish genome's are global.
+      lines = [(c.fromName || Genome.nodeName(c.from)) + ' → ' + (c.toName || Genome.nodeName(c.to)),
                'weight ' + (c.w >= 0 ? '+' : '') + c.w.toFixed(3),
                (c.recurrent ? 'MEMORY - reads last tick' :
                  (c.enabled ? 'enabled' : 'disabled gene'))];
@@ -391,7 +398,7 @@ const BrainView = {
 
       // What is actually travelling this wire right now.
       const carried = Math.abs(e.from.value * c.w);
-      if (carried < 0.02) continue;
+      if (carried < 0.02 / this.emphasis) continue;
 
       const mag = Math.min(1, Math.abs(c.w) / 2);
       const strength = Math.min(1, carried);

@@ -12,7 +12,7 @@
 Regenerate it yourself: <code>node tools/make-demo.js</code></sub>
 
 ![no dependencies](https://img.shields.io/badge/dependencies-0-brightgreen?style=flat-square)
-![tests](https://img.shields.io/badge/tests-168%20passing-brightgreen?style=flat-square)
+![tests](https://img.shields.io/badge/tests-192%20passing-brightgreen?style=flat-square)
 ![generations](https://img.shields.io/badge/generations%20trained-380-blue?style=flat-square)
 ![vanilla js](https://img.shields.io/badge/vanilla-JS-f7df1e?style=flat-square)
 
@@ -23,7 +23,7 @@ Regenerate it yourself: <code>node tools/make-demo.js</code></sub>
 ## What you are looking at
 
 Thirty-four fish and one shark in a closed tank. The shark is **faster** (105 px/s against
-90) and has no brain at all — it simply aims at the nearest fish and swims flat out.
+90) and by default has no brain at all — it simply aims at the nearest fish and swims flat out.
 
 The fish cannot win a straight race. Their only advantage is that they turn inside a circle
 the shark physically cannot fit in — **30px against 66px**. Every evasion you see is that
@@ -31,6 +31,19 @@ one asymmetry being exploited.
 
 Nobody programmed it. The fish started with 16 parameters, no hidden neurons and random
 weights, and were eaten until they weren't.
+
+### New: the shark can think too
+
+Press **SHARK BRAIN** (or `k`) and a small neural network takes over the shark. It has one
+survival instinct: **if it cannot catch a fish within 10 seconds, it starves.** A ring
+around it shows the clock draining. When it runs out the shark dies, and a new one arrives.
+
+The brain teaches itself in the background by hunting clones of the champion fish. Every
+generation's best brain goes into a dropdown, so you can watch the generation-1 shark
+flail and then switch to a trained one. Its network is drawn live under the tank.
+
+Switch it off and you get the original brainless chaser. That is still the default for
+every test and trainer, so every number below stays comparable.
 
 ---
 
@@ -43,7 +56,8 @@ start index.html            # Windows  (macOS: open, Linux: xdg-open)
 
 node train.js --gens 70     # train — resumes from the saved champion
 node train.js --repeat 10   # …and keep going, unattended
-node tests/run-all.js       # 168 assertions
+node train-shark.js --gens 100   # train the shark brain
+node tests/run-all.js       # 192 assertions
 ```
 
 There is nothing to install. It is `<script>` tags and a canvas.
@@ -117,6 +131,9 @@ Every number is measured. The scripts that measured them are in `tests/`.
 | `js/evolution.js` | Fitness, tournament selection, crossover, speciation |
 | `js/senses.js` | The world reduced to 12 numbers, all egocentric, all normalised |
 | `js/schooling.js` | Packs, scouts, alarm relay, escape-route search |
+| `js/sharkbrain.js` | The shark's optional brain: 8 senses (including hunger) → 6 hidden → turn, speed |
+| `js/sharktrainer.js` | Shark self-training against champion fish, in the page and in Node |
+| `train-shark.js` | Offline shark trainer; writes every generation's brain for the page's dropdown |
 | `js/brainview.js` | The inspector — nodes light up, signals travel the wires |
 | `train.js` | Offline trainer. Scores each brain **alone**, which is the whole point |
 | `tools/make-demo.js` | Records the simulation into the SVG at the top of this file |

@@ -1,7 +1,7 @@
 const fs = require('fs'), vm = require('vm'), path = require('path');
 const root = process.argv[2] || path.join(__dirname, '..');
 const FILES = ['config','rng','vec','senses','brain','genome','evolution','schooling',
-               'fish','shark','world','persist'];
+               'fish','sharkbrain','shark','world','persist'];
 const src = FILES.map(n => fs.readFileSync(path.join(root, 'js', n + '.js'), 'utf8'))
   .join(String.fromCharCode(10));
 const ctx = { console, Math, JSON, Number, Array, Object, Map, Set, Float64Array, Int32Array, Date, process };
@@ -82,6 +82,30 @@ check('the colony is not extinct after 60s', live.length > 0 && !w.extinct,
 check('the population is sampled for the chart', w.history.length > 0,
       w.history.length + ' samples, latest population ' +
       (w.history.length ? w.history[w.history.length - 1].population : 0));
+
+// --- 6b. corpses are cleared in a colony that never resets --------------------
+// They used to pile up forever: 108 dead fish after five minutes, walked by
+// every loop over world.fish on every tick and drawn every frame.
+{
+  CONFIG.life.continuous = true;
+  CONFIG.seed = 404;
+  const w = new World();
+  w.fish.forEach(f => { f.age = CONFIG.life.matureSeconds; });
+  const victims = w.fish.slice(0, 5);
+  for (const v of victims) { v.x = w.shark.x; v.y = w.shark.y; }
+  w.resolveEating();
+  const eaten = victims.filter(v => !v.alive).length;
+  const stamped = victims.every(v => v.alive || v.diedAt === w.time);
+  for (let i = 0; i < 60; i++) w.update(CONFIG.sim.dt);
+  const stillThere = w.fish.filter(f => victims.includes(f) && !f.alive).length;
+  for (let i = 0; i < Math.round((CONFIG.life.corpseSeconds + 0.5) * 60); i++) w.update(CONFIG.sim.dt);
+  const gone = !w.fish.some(f => victims.includes(f) && !f.alive);
+  check('an eaten fish records when it died', eaten > 0 && stamped);
+  check('a fresh corpse stays visible for a while', stillThere === eaten);
+  check('continuous mode clears corpses after corpseSeconds, bounding world.fish',
+        gone && w.fish.every(f => f.alive || w.time - f.diedAt <= CONFIG.life.corpseSeconds),
+        eaten + ' eaten, array now ' + w.fish.length);
+}
 
 // --- 7. generational mode is untouched ---------------------------------------
 CONFIG.life.continuous = false;

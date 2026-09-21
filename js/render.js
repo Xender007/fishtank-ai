@@ -35,11 +35,10 @@ const Render = {
     if (typeof REDUCED_MOTION === 'undefined' || !REDUCED_MOTION) this.t++;
     if (!this.motes) this.initMotes(world);
 
-    this.sea(ctx, world);
+    this.background(ctx, world);
     this.drawMotes(ctx, world);
-    for (const body of [...world.fish, ...world.sharks]) {
-      if (body.alive !== false) this.wake(ctx, body, world.sharks.includes(body));
-    }
+    this.fishWakes(ctx, world);
+    for (const s of world.sharks) this.wake(ctx, s, true);   // one or two: cheap
     if (Schooling.active(world)) this.packs(ctx, world, view);
 
     // Rays go UNDER the bodies, so the fish stay readable on top of them.
@@ -57,20 +56,58 @@ const Render = {
     for (const f of world.fish) if (!f.alive) this.deadFish(ctx, f);
     for (const f of world.fish) if (f.alive) this.fish(ctx, f, view.showLineage, Schooling.active(world));
 
+    // With nobody under the cursor the brain panel shows a default fish; ring
+    // it so it is obvious whose network is on screen.
+    if (!view.focused && view.subject && view.subject.alive) this.focusRing(ctx, view.subject);
     if (view.focused && view.focused.alive) {
       this.focusRing(ctx, view.focused);
       this.rudder(ctx, view.focused);
       if (CONFIG.senses.neighbours) this.kinLinks(ctx, view.focused, world);
     }
 
+    for (const c of world.sharkCorpses || []) this.sharkCorpse(ctx, c, world);
     for (const s of world.sharks) this.shark(ctx, s);
-    this.vignette(ctx, world);
+    for (const s of world.sharks) if (s.brain) this.hungerRing(ctx, s);
     this.tankEdge(ctx, world);
+  },
+
+  // ---------------------------------------------------------------------------
+  // THE WATER, DRAWN ONCE.
+  // ---------------------------------------------------------------------------
+  // MEASURED with 70 fish at devicePixelRatio 2 (real frame intervals, not JS
+  // timers - canvas work is rasterised after the script returns): the depth
+  // gradient cost ~10ms a frame and the full-screen vignette another ~11ms,
+  // more than every fish, ring and wake combined. Neither ever changes. So both
+  // are painted once into an offscreen layer at the canvas's own pixel size
+  // and copied in with one drawImage. The vignette now sits UNDER the animals
+  // instead of over them, which is the only visible difference.
+  //
+  // Rebuilt whenever the canvas buffer changes size (zoom, another monitor).
+  // Without a DOM (the Node tests) it simply draws directly.
+  // ---------------------------------------------------------------------------
+  background(ctx, world) {
+    const cv = ctx.canvas;
+    if (typeof document === 'undefined' || !cv || !(cv.width > 0)) {
+      this.sea(ctx, world);
+      this.vignette(ctx, world);
+      return;
+    }
+    if (!this.bg || this.bg.width !== cv.width || this.bg.height !== cv.height) {
+      const layer = document.createElement('canvas');
+      layer.width = cv.width;
+      layer.height = cv.height;
+      const c = layer.getContext('2d');
+      c.setTransform(cv.width / world.w, 0, 0, cv.height / world.h, 0, 0);
+      this.sea(c, world);
+      this.vignette(c, world);
+      this.bg = layer;
+    }
+    ctx.drawImage(this.bg, 0, 0, world.w, world.h);
   },
 
   // Render-owned history: pausing freezes the wake, and redrawing cannot
   // advance an animal, consume simulation randomness, or alter its fitness.
-  wake(ctx, body, predator) {
+  trailFor(body) {
     let trail = this.trails.get(body);
     if (!trail) { trail = []; this.trails.set(body, trail); }
     const last = trail[trail.length - 1];
@@ -78,6 +115,51 @@ const Render = {
       trail.push({ x: body.x, y: body.y, age: body.age });
       if (trail.length > 18) trail.shift();
     }
+    return trail;
+  },
+
+  // ---------------------------------------------------------------------------
+  // EVERY FISH WAKE IN FOUR STROKES.
+  // ---------------------------------------------------------------------------
+  // MEASURED at 70 fish (continuous life, devicePixelRatio 2): wakes cost 19.8ms
+  // of a 19.5ms tank render - effectively ALL of it. Each fish drew each of its
+  // ~17 segments as its own round-capped stroke, so a full colony issued about
+  // 1,200 separate strokes per frame. The page fell to ~11fps and the motion
+  // smeared, and the stacked translucent strokes turned the water milky.
+  //
+  // Segments are now grouped into four freshness bands and every fish's
+  // segments in a band go into ONE path: four strokes for the whole school, the
+  // same look within a band's resolution.
+  // ---------------------------------------------------------------------------
+  fishWakes(ctx, world) {
+    const BANDS = 4;
+    const paths = [];
+    for (let b = 0; b < BANDS; b++) paths.push([]);
+    for (const f of world.fish) {
+      if (!f.alive) continue;
+      const trail = this.trailFor(f);
+      for (let i = 1; i < trail.length; i++) {
+        const freshness = 1 - (f.age - trail[i].age) / 1.2;
+        if (freshness <= 0) continue;
+        paths[Math.min(BANDS - 1, Math.floor(freshness * BANDS))].push(trail[i - 1], trail[i]);
+      }
+    }
+    ctx.save(); ctx.lineCap = 'round';
+    for (let b = 0; b < BANDS; b++) {
+      const seg = paths[b];
+      if (!seg.length) continue;
+      const freshness = (b + 0.5) / BANDS;
+      ctx.strokeStyle = 'rgba(148, 238, 224,' + freshness * 0.07 + ')';
+      ctx.lineWidth = 3 * freshness;
+      ctx.beginPath();
+      for (let i = 0; i < seg.length; i += 2) { ctx.moveTo(seg[i].x, seg[i].y); ctx.lineTo(seg[i + 1].x, seg[i + 1].y); }
+      ctx.stroke();
+    }
+    ctx.restore();
+  },
+
+  wake(ctx, body, predator) {
+    const trail = this.trailFor(body);
     ctx.save(); ctx.lineCap = 'round';
     for (let i = 1; i < trail.length; i++) {
       const freshness = Math.max(0, 1 - (body.age - trail[i].age) / 1.2);
@@ -204,15 +286,21 @@ const Render = {
         a:   r.range(0.03, 0.14),
       });
     }
+    // Four brightness groups, so 110 specks cost four fills rather than 110.
+    for (const m of this.motes) m.band = Math.min(3, Math.floor((m.a - 0.03) / 0.11 * 4));
   },
 
   drawMotes(ctx) {
-    for (const m of this.motes) {
-      const x = m.x + Math.sin(this.t * 0.005 + m.ph) * m.amp;
-      const y = m.y + Math.cos(this.t * 0.003 + m.ph) * m.amp * 0.5;
-      ctx.fillStyle = 'rgba(180, 235, 255, ' + m.a + ')';
+    for (let band = 0; band < 4; band++) {
+      ctx.fillStyle = 'rgba(180, 235, 255, ' + (0.03 + (band + 0.5) * 0.11 / 4).toFixed(3) + ')';
       ctx.beginPath();
-      ctx.arc(x, y, m.rad, 0, Math.PI * 2);
+      for (const m of this.motes) {
+        if (m.band !== band) continue;
+        const x = m.x + Math.sin(this.t * 0.005 + m.ph) * m.amp;
+        const y = m.y + Math.cos(this.t * 0.003 + m.ph) * m.amp * 0.5;
+        ctx.moveTo(x + m.rad, y);
+        ctx.arc(x, y, m.rad, 0, Math.PI * 2);
+      }
       ctx.fill();
     }
   },
@@ -461,6 +549,50 @@ const Render = {
   // lower frequencies, and it makes the shark read as heavy rather than
   // frantic, which is exactly the threat we want it to project.
   // ---------------------------------------------------------------------------
+
+  // ---------------------------------------------------------------------------
+  // THE SURVIVAL INSTINCT, MADE VISIBLE. A ring around a brained shark that
+  // drains as its starvation clock runs: full and green just after a meal,
+  // short and red when it is about to die. Brainless sharks never starve and
+  // get no ring.
+  // ---------------------------------------------------------------------------
+  hungerRing(ctx, s) {
+    const left = V.clamp(1 - s.hunger / CONFIG.sharkBrain.starveSeconds, 0, 1);
+    const r = CONFIG.shark.radius * 2.6;
+    const hue = Math.round(120 * left);                  // 120 green -> 0 red
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(8, 23, 34, 0.55)';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = 'hsla(' + hue + ', 85%, 58%, 0.9)';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left);
+    ctx.stroke();
+    ctx.restore();
+  },
+
+  // A starved shark lies where it died, drained of colour, fading out while
+  // its replacement is on the way.
+  sharkCorpse(ctx, c, world) {
+    const since = world.time - c.diedAt;
+    const fade = V.clamp(1 - since / (CONFIG.sharkBrain.respawnSeconds + 2.5), 0, 1);
+    if (fade <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = 0.55 * fade;
+    ctx.filter = 'grayscale(1)';
+    this.shark(ctx, c);
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = '#ffb4c0';
+    ctx.font = '10px ui-monospace, Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('starved', c.x, c.y - CONFIG.shark.radius * 2.2);
+    ctx.restore();
+  },
 
   shark(ctx, s) {
     const r = CONFIG.shark.radius;

@@ -60,6 +60,18 @@ class World {
     this.bestBrain = null;
     this.bestFitness = 0;
 
+    // The brain the sharks in THIS tank run, or null for the brainless chaser.
+    // It lives on the world because it changes the simulation. See
+    // setSharkBrain(). Starved sharks become corpses and are replaced.
+    this.sharkBrain = null;
+    this.sharkCorpses = [];
+    this.sharkRespawns = [];    // times (world.time) at which to add a shark
+    this.starvations = 0;       // across all rounds, like totalKills
+
+    // Set on the shark trainer's private tanks: simulate only. No generation
+    // flip, no breeding, no respawn - a starved shark simply ends the trial.
+    this.evaluationOnly = false;
+
     // Which repeat of the current generation we are on. See nextGeneration().
     this.trial = 1;
     this.totalKills = 0; // across ALL rounds. Note the shark itself is rebuilt
@@ -109,9 +121,12 @@ class World {
       this.sharks.push(new Shark(
         this.rng.range(m, this.w - m),
         this.rng.range(m, this.h - m),
-        this.rng.angle()
+        this.rng.angle(),
+        this.sharkBrain ? this.sharkBrain.clone() : null
       ));
     }
+    this.sharkCorpses = [];
+    this.sharkRespawns = [];
     // Kept so older code and the readouts can still say "the shark".
     this.shark = this.sharks[0];
     this.nextFishId = 0;
@@ -127,6 +142,7 @@ class World {
     Schooling.prepare(this);
     for (const f of this.fish) f.update(dt, this);
     for (const s of this.sharks) s.update(dt, this);
+    if (this.sharkBrain) this.handleStarvation();
     // Packs only change when somebody is eaten. organise() filters, sorts and
     // re-elects an alpha for every pack, and running it unconditionally meant
     // doing all of that TWICE per tick - once here and once inside prepare()
@@ -136,6 +152,7 @@ class World {
 
     this.ticks++;
     this.time = this.ticks * dt;
+    if (this.evaluationOnly) return;
 
     // ---- continuous mode: no generation boundary at all ----
     if (CONFIG.life.continuous) {
@@ -154,6 +171,52 @@ class World {
     // whole simulation forever, and in Stage 4 that would stall EVOLUTION.
     if (this.aliveCount() === 0 || this.ticks >= this.generationTicks) {
       this.nextGeneration();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // THE SHARK'S BRAIN - install, replace or remove it.
+  // ---------------------------------------------------------------------------
+  // null restores the brainless chaser. Live sharks keep their bodies and only
+  // swap drivers; each gets its own clone so their live activations differ.
+  setSharkBrain(brain) {
+    this.sharkBrain = brain || null;
+    for (const s of this.sharks) s.setBrain(brain ? brain.clone() : null);
+    // Switching the brain off also switches off starvation, so anybody who
+    // was waiting to be replaced comes back now.
+    if (!brain) while (this.sharks.length < CONFIG.shark.count) this.addShark();
+    if (!brain) this.sharkRespawns = [];
+  }
+
+  addShark() {
+    const m = 40;
+    const s = new Shark(this.rng.range(m, this.w - m), this.rng.range(m, this.h - m),
+                        this.rng.angle(), this.sharkBrain ? this.sharkBrain.clone() : null);
+    this.sharks.push(s);
+    this.shark = this.sharks[0];
+    return s;
+  }
+
+  // A starved shark leaves the hunt: it is taken out of world.sharks, so no fish
+  // sense, alarm or planner ever reacts to a dead predator, and kept as a
+  // fading corpse for the renderer. A replacement arrives after a short pause.
+  handleStarvation() {
+    for (let i = this.sharks.length - 1; i >= 0; i--) {
+      const s = this.sharks[i];
+      if (s.alive) continue;
+      this.sharks.splice(i, 1);
+      this.starvations++;
+      if (this.evaluationOnly) continue;
+      this.sharkCorpses.push({ x: s.x, y: s.y, heading: s.heading, age: s.age,
+                               kills: s.kills, diedAt: this.time });
+      if (this.sharkCorpses.length > 6) this.sharkCorpses.shift();
+      this.sharkRespawns.push(this.time + CONFIG.sharkBrain.respawnSeconds);
+    }
+    this.shark = this.sharks[0] || null;
+    for (let i = this.sharkRespawns.length - 1; i >= 0; i--) {
+      if (this.time < this.sharkRespawns[i]) continue;
+      this.sharkRespawns.splice(i, 1);
+      this.addShark();
     }
   }
 
@@ -199,18 +262,19 @@ class World {
   // ---------------------------------------------------------------------------
   // CONTINUOUS LIFE - breeding without a generation boundary.
   // ---------------------------------------------------------------------------
-  // Mature fish accumulate energy simply by staying alive. When a fish has
-  // enough, it spends it on one offspring: a child of itself and the nearest
-  // mature neighbour, born small and clumsy beside its parent.
+  // Every mature fish has a small chance each tick of producing one offspring:
+  // a child of itself and the nearest mature neighbour, born small and clumsy
+  // beside its parent. The chance shrinks as the tank fills (carrying capacity).
   //
   // Note what is NOT here. Nothing scores anybody, nothing is culled, no
-  // tournament is run. Selection happens because fish that survive long enough
-  // to pay for a child leave descendants and fish that are eaten do not. That
+  // tournament is run. Selection happens because fish that survive longer get
+  // more chances to breed, and fish that are eaten get none. That
   // is the whole mechanism, and it is a good deal closer to how selection
   // actually works than a synchronised cull on a timer.
   // ---------------------------------------------------------------------------
   breedContinuously(dt) {
     const cfg = CONFIG.life;
+    this.clearOldCorpses();
     const evoCfg = CONFIG.evolution;
     const live = [];
     for (const f of this.fish) if (f.alive) live.push(f);
@@ -227,12 +291,23 @@ class World {
 
     if (live.length >= cfg.maxPopulation) return;
 
+    // CARRYING CAPACITY - logistic growth, the textbook model of a population
+    // meeting the limits of its habitat. Each adult breeds at random, at a rate
+    // that shrinks as the tank fills and reaches zero at maxPopulation.
+    //
+    // This replaced banked breeding energy. Energy built at full rate right up
+    // to the cap, so dozens of adults sat on a stored pregnancy and every fish
+    // the shark ate was replaced within a tick: the count read 70/70 and looked
+    // frozen. And because a colony started with every adult on zero energy,
+    // they all filled up in lockstep and bred in the same half-second, 41 -> 70
+    // at once. A per-tick chance has no memory, so neither can happen: losses
+    // show, and the colony recovers over seconds.
+    const crowding = 1 - live.length / cfg.maxPopulation;
+    const chance = dt * crowding / cfg.breedEnergy;
+
     for (const parent of live) {
       if (parent.maturity() < cfg.breedMaturity) continue;
-
-      parent.energy += dt;
-      if (parent.energy < cfg.breedEnergy) continue;
-      parent.energy = 0;
+      if (this.rng.next() >= chance) continue;
 
       // Nearest mature neighbour, if there is one in range.
       let mate = null, best = cfg.breedRange * cfg.breedRange;
@@ -272,6 +347,16 @@ class World {
       // synchronised cohort forming, which would quietly reinvent generations.
       break;
     }
+  }
+
+  // A continuous colony is never respawned, so the dead must be removed or they
+  // accumulate forever. Checked every tick but only rebuilds the array when
+  // something is actually old enough to go.
+  clearOldCorpses() {
+    const keep = CONFIG.life.corpseSeconds;
+    let stale = false;
+    for (const f of this.fish) if (!f.alive && this.time - (f.diedAt || 0) > keep) { stale = true; break; }
+    if (stale) this.fish = this.fish.filter(f => f.alive || this.time - (f.diedAt || 0) <= keep);
   }
 
   // With no generation boundaries there is nothing to hang a chart point on, so
@@ -464,7 +549,9 @@ class World {
         const reach = sharkR + f.radius();
         if (V.dist2(f.x, f.y, s.x, s.y) >= reach * reach) continue;
         f.alive = false;
+        f.diedAt = this.time;
         s.kills++;
+        s.hunger = 0;            // a meal resets the starvation clock
         this.totalKills++;
         caught++;
         break;
