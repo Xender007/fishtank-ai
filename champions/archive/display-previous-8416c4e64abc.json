@@ -1,11 +1,10 @@
-// Best validated display brain. Written by train.js.
-window.CHAMPION = {
+{
   "version": 1,
-  "saved": "2026-09-21T19:15:58.259Z",
+  "saved": "2026-09-21T19:06:25.233Z",
   "meta": {
     "senseLayout": "v3",
     "regime": "v3-team-critic-hunger",
-    "params": 58,
+    "params": 56,
     "hidden": 2,
     "senses": 23,
     "clones": 45,
@@ -16,12 +15,12 @@ window.CHAMPION = {
       332,
       271
     ],
-    "critic": "clearance 0.619 (hand 2), final gap 0.651 (hand 0.65), collision -23.036 (hand -18), wall -0.682 (hand -1), pack distance 0.028 (hand -0.06), vs reflex -1.172 (hand -1.5), vs last turn -7 (hand -3), braking 0.054 (hand 0), urgency 0.022 (hand 0) · hidden pull 0.92",
-    "generation": 10,
-    "totalGenerations": 432,
-    "benchmark": 34.27239711934079,
+    "critic": "clearance 0.619 (hand 2), final gap 0.58 (hand 0.65), collision -18.378 (hand -18), wall -0.682 (hand -1), pack distance 0.015 (hand -0.06), vs reflex -2.5 (hand -1.5), vs last turn -3.992 (hand -3), braking 0.015 (hand 0), urgency 0.022 (hand 0) · hidden pull 1.00",
+    "generation": 5,
+    "totalGenerations": 427,
+    "benchmark": 35.40578189300327,
     "evaluation": "{\"regime\":\"v3-team-critic-hunger\",\"clones\":45,\"seconds\":45,\"sharks\":2,\"runs\":36,\"seedBase\":500000,\"opponents\":\"afdb370197\",\"environment\":{\"layout\":\"v3\",\"dt\":0.016666666666666666,\"fish\":{\"speed\":90,\"turn\":3,\"radius\":5},\"shark\":{\"radius\":16,\"speed\":105,\"turn\":1.6,\"circleLimit\":3,\"circleBreakSeconds\":1.4},\"sharkBrain\":{\"starve\":10,\"respawn\":1.5,\"minSpeed\":0.5},\"tank\":{\"w\":900,\"h\":600},\"senses\":{\"rayCount\":9,\"fov\":5.759586531581287,\"range\":170,\"wallRange\":130,\"neighbours\":false,\"neighbourRange\":150,\"crowdScale\":3},\"schooling\":{\"enabled\":true,\"minSize\":7,\"targetSize\":9,\"spacing\":24,\"alarmRange\":150,\"memorySeconds\":2.5,\"scoutRange\":260,\"followerRange\":170,\"nearSense\":65,\"planEvery\":6,\"maxPlansPerTick\":8,\"predictionSteps\":10,\"predictionDt\":0.12,\"routeSteps\":16,\"dodgeSteps\":4},\"learned\":{\"teamwork\":true,\"planner\":true},\"hunger\":{\"enabled\":true,\"starveSeconds\":40,\"startEnergy\":0.7,\"pelletEnergy\":0.4,\"pellets\":40,\"pelletRadius\":4,\"senseRange\":220}}}",
-    "displayBenchmark": 47.808106995883314,
+    "displayBenchmark": 47.712355967076725,
     "displayEvaluation": "{\"regime\":\"v3-team-critic-hunger\",\"clones\":45,\"seconds\":60,\"sharks\":1,\"runs\":36,\"seedBase\":7300001,\"opponents\":\"b60d463f0e\",\"environment\":{\"layout\":\"v3\",\"dt\":0.016666666666666666,\"fish\":{\"speed\":90,\"turn\":3,\"radius\":5},\"shark\":{\"radius\":16,\"speed\":105,\"turn\":1.6,\"circleLimit\":3,\"circleBreakSeconds\":1.4},\"sharkBrain\":{\"starve\":10,\"respawn\":1.5,\"minSpeed\":0.5},\"tank\":{\"w\":900,\"h\":600},\"senses\":{\"rayCount\":9,\"fov\":5.759586531581287,\"range\":170,\"wallRange\":130,\"neighbours\":false,\"neighbourRange\":150,\"crowdScale\":3},\"schooling\":{\"enabled\":true,\"minSize\":7,\"targetSize\":9,\"spacing\":24,\"alarmRange\":150,\"memorySeconds\":2.5,\"scoutRange\":260,\"followerRange\":170,\"nearSense\":65,\"planEvery\":6,\"maxPlansPerTick\":8,\"predictionSteps\":10,\"predictionDt\":0.12,\"routeSteps\":16,\"dodgeSteps\":4},\"learned\":{\"teamwork\":true,\"planner\":true},\"hunger\":{\"enabled\":true,\"starveSeconds\":40,\"startEnergy\":0.7,\"pelletEnergy\":0.4,\"pellets\":40,\"pelletRadius\":4,\"senseRange\":220}}}",
     "displayClones": 45,
     "displaySeconds": 60,
@@ -148,17 +147,17 @@ window.CHAMPION = {
     {
       "id": 23,
       "type": 1,
-      "bias": -0.06365050092227004
+      "bias": 0.15742781778891254
     },
     {
       "id": 24,
       "type": 1,
-      "bias": 0.5256554701295093
+      "bias": 0.10327858990058303
     },
     {
       "id": 26,
       "type": 2,
-      "bias": 0.6162624282664317
+      "bias": 0.5845630161631785
     },
     {
       "id": 30,
@@ -173,7 +172,7 @@ window.CHAMPION = {
       "to": 23,
       "recurrent": false,
       "plasticity": -0.13247297293928748,
-      "w": 0.38018969088727766,
+      "w": 0.35425049482199844,
       "enabled": true
     },
     {
@@ -182,8 +181,8 @@ window.CHAMPION = {
       "to": 24,
       "recurrent": false,
       "plasticity": -0.12813246506428896,
-      "w": -0.3347232563471462,
-      "enabled": true
+      "w": 0.1765487807510187,
+      "enabled": false
     },
     {
       "inn": 2,
@@ -191,7 +190,7 @@ window.CHAMPION = {
       "to": 23,
       "recurrent": false,
       "plasticity": 0.03660987900884721,
-      "w": 0.1534952185977882,
+      "w": 0.24787042438478762,
       "enabled": true
     },
     {
@@ -201,15 +200,15 @@ window.CHAMPION = {
       "recurrent": false,
       "plasticity": 0,
       "w": -0.18140473148853256,
-      "enabled": true
+      "enabled": false
     },
     {
       "inn": 4,
       "from": 2,
       "to": 23,
       "recurrent": false,
-      "plasticity": -0.24888009995721294,
-      "w": -0.47875838755884653,
+      "plasticity": -0.35494896161590084,
+      "w": 1.777433562574943,
       "enabled": true
     },
     {
@@ -217,8 +216,8 @@ window.CHAMPION = {
       "from": 2,
       "to": 24,
       "recurrent": false,
-      "plasticity": 0.09049869945435471,
-      "w": -0.2208180301154327,
+      "plasticity": 0.06460606025061952,
+      "w": 0.091714239319899,
       "enabled": true
     },
     {
@@ -227,7 +226,7 @@ window.CHAMPION = {
       "to": 23,
       "recurrent": false,
       "plasticity": -0.42785988017843374,
-      "w": -0.38643379183185744,
+      "w": -0.9420118786474944,
       "enabled": true
     },
     {
@@ -235,8 +234,8 @@ window.CHAMPION = {
       "from": 3,
       "to": 24,
       "recurrent": false,
-      "plasticity": 0.1401017685831045,
-      "w": 0.7760943485221583,
+      "plasticity": -0.10456505602279101,
+      "w": 0.9200534438775314,
       "enabled": true
     },
     {
@@ -244,8 +243,8 @@ window.CHAMPION = {
       "from": 4,
       "to": 23,
       "recurrent": false,
-      "plasticity": 0,
-      "w": 0.024665421875934568,
+      "plasticity": -0.11324282137832758,
+      "w": 0.5533901548405604,
       "enabled": true
     },
     {
@@ -253,8 +252,8 @@ window.CHAMPION = {
       "from": 4,
       "to": 24,
       "recurrent": false,
-      "plasticity": -0.053957469349897265,
-      "w": 0.7099559739317727,
+      "plasticity": -0.1511379210400714,
+      "w": 0.3218185492222912,
       "enabled": true
     },
     {
@@ -262,8 +261,8 @@ window.CHAMPION = {
       "from": 5,
       "to": 23,
       "recurrent": false,
-      "plasticity": 0.1930250979235678,
-      "w": 1.158176613436455,
+      "plasticity": 0.6,
+      "w": 1.5265172424682873,
       "enabled": true
     },
     {
@@ -272,7 +271,7 @@ window.CHAMPION = {
       "to": 24,
       "recurrent": false,
       "plasticity": -0.07636827530691447,
-      "w": -0.6090540911545492,
+      "w": 0.455289388087614,
       "enabled": true
     },
     {
@@ -280,8 +279,8 @@ window.CHAMPION = {
       "from": 6,
       "to": 23,
       "recurrent": false,
-      "plasticity": -0.32790502910440644,
-      "w": -0.8355684092560591,
+      "plasticity": -0.24731230898706402,
+      "w": -0.5455130610431987,
       "enabled": true
     },
     {
@@ -289,7 +288,7 @@ window.CHAMPION = {
       "from": 6,
       "to": 24,
       "recurrent": false,
-      "plasticity": -0.14747017685287334,
+      "plasticity": -0.10192227834665894,
       "w": 0.1896899210040911,
       "enabled": true
     },
@@ -298,8 +297,8 @@ window.CHAMPION = {
       "from": 7,
       "to": 23,
       "recurrent": false,
-      "plasticity": -0.14955424753613122,
-      "w": -0.8424734819802975,
+      "plasticity": -0.09174490408343322,
+      "w": -0.5315280983008754,
       "enabled": true
     },
     {
@@ -307,8 +306,8 @@ window.CHAMPION = {
       "from": 7,
       "to": 24,
       "recurrent": false,
-      "plasticity": -0.1655597652799698,
-      "w": 0.7651849075683321,
+      "plasticity": -0.38373645692483216,
+      "w": 0.172903922037908,
       "enabled": true
     },
     {
@@ -316,8 +315,8 @@ window.CHAMPION = {
       "from": 8,
       "to": 23,
       "recurrent": false,
-      "plasticity": -0.4762023730876779,
-      "w": 0.1745258471944685,
+      "plasticity": -0.4763273861403259,
+      "w": 0.16619199944729102,
       "enabled": true
     },
     {
@@ -325,8 +324,8 @@ window.CHAMPION = {
       "from": 8,
       "to": 24,
       "recurrent": false,
-      "plasticity": -0.03325173707227218,
-      "w": -0.05894456651917007,
+      "plasticity": 0.13370656947656678,
+      "w": -0.5158122532714149,
       "enabled": true
     },
     {
@@ -334,7 +333,7 @@ window.CHAMPION = {
       "from": 9,
       "to": 23,
       "recurrent": false,
-      "plasticity": -0.3341913645734613,
+      "plasticity": 0.21353702692450954,
       "w": -0.3721032279797632,
       "enabled": true
     },
@@ -343,8 +342,8 @@ window.CHAMPION = {
       "from": 9,
       "to": 24,
       "recurrent": false,
-      "plasticity": -0.3405214696738787,
-      "w": 0.12664876303641337,
+      "plasticity": -0.5244739985048358,
+      "w": 0.6501066287235824,
       "enabled": true
     },
     {
@@ -352,7 +351,7 @@ window.CHAMPION = {
       "from": 10,
       "to": 23,
       "recurrent": false,
-      "plasticity": 0.163108880150409,
+      "plasticity": -0.1461416281318345,
       "w": 0.656071050945268,
       "enabled": true
     },
@@ -362,7 +361,7 @@ window.CHAMPION = {
       "to": 24,
       "recurrent": false,
       "plasticity": 0,
-      "w": -0.39292490285750176,
+      "w": -0.11054330160704706,
       "enabled": true
     },
     {
@@ -370,8 +369,8 @@ window.CHAMPION = {
       "from": 11,
       "to": 23,
       "recurrent": false,
-      "plasticity": 0.2889687287827737,
-      "w": 1.4167935959542728,
+      "plasticity": 0.20503283217790225,
+      "w": 1.3608377933143534,
       "enabled": true
     },
     {
@@ -379,8 +378,8 @@ window.CHAMPION = {
       "from": 11,
       "to": 24,
       "recurrent": false,
-      "plasticity": -0.08459696839258492,
-      "w": 0.32297104312940017,
+      "plasticity": -0.12213066138768591,
+      "w": -0.13408378796224096,
       "enabled": true
     },
     {
@@ -388,8 +387,8 @@ window.CHAMPION = {
       "from": 1,
       "to": 26,
       "recurrent": false,
-      "plasticity": 0.2543054801811359,
-      "w": 0.26417584432421337,
+      "plasticity": -0.14821261606217467,
+      "w": 1.1678390906432727,
       "enabled": true
     },
     {
@@ -397,8 +396,8 @@ window.CHAMPION = {
       "from": 26,
       "to": 24,
       "recurrent": false,
-      "plasticity": 0.2282611026858969,
-      "w": 0.8455881016602036,
+      "plasticity": -0.022855289040086754,
+      "w": 0.5790273221350255,
       "enabled": true
     },
     {
@@ -406,8 +405,8 @@ window.CHAMPION = {
       "from": 8,
       "to": 26,
       "recurrent": false,
-      "plasticity": -0.4554240542453792,
-      "w": -0.23190610049477547,
+      "plasticity": 0.062233321854361104,
+      "w": -0.9583890631618746,
       "enabled": true
     },
     {
@@ -415,8 +414,8 @@ window.CHAMPION = {
       "from": 0,
       "to": 30,
       "recurrent": false,
-      "plasticity": 0,
-      "w": -0.4998842621499634,
+      "plasticity": 0.2452940077417758,
+      "w": 0.6911429802217601,
       "enabled": true
     },
     {
@@ -424,8 +423,8 @@ window.CHAMPION = {
       "from": 30,
       "to": 24,
       "recurrent": false,
-      "plasticity": 0.09201798040078808,
-      "w": 0.6549981434572169,
+      "plasticity": 0.293610349223643,
+      "w": 0.6194377200935803,
       "enabled": true
     },
     {
@@ -433,7 +432,7 @@ window.CHAMPION = {
       "from": 12,
       "to": 23,
       "recurrent": false,
-      "plasticity": -0.34303009306631543,
+      "plasticity": -0.3315457609075323,
       "w": 1.8699413221406194,
       "enabled": true
     },
@@ -443,7 +442,7 @@ window.CHAMPION = {
       "to": 24,
       "recurrent": false,
       "plasticity": 0.126869239533124,
-      "w": 0.6569726099494683,
+      "w": 0.4274963433856405,
       "enabled": true
     },
     {
@@ -452,7 +451,7 @@ window.CHAMPION = {
       "to": 23,
       "recurrent": false,
       "plasticity": 0.011466049682350325,
-      "w": 0.02967421420463949,
+      "w": 0.26589166432961764,
       "enabled": true
     },
     {
@@ -460,8 +459,8 @@ window.CHAMPION = {
       "from": 13,
       "to": 24,
       "recurrent": false,
-      "plasticity": -0.01630777376110168,
-      "w": 0.12962190444197147,
+      "plasticity": 0.3403657221554144,
+      "w": 0.436260910317926,
       "enabled": true
     },
     {
@@ -469,8 +468,8 @@ window.CHAMPION = {
       "from": 14,
       "to": 23,
       "recurrent": false,
-      "plasticity": -0.33246881551977703,
-      "w": 1.8807212934083042,
+      "plasticity": -0.11289811988861158,
+      "w": 2.177166248486156,
       "enabled": true
     },
     {
@@ -478,8 +477,8 @@ window.CHAMPION = {
       "from": 14,
       "to": 24,
       "recurrent": false,
-      "plasticity": 0.04196714181909572,
-      "w": 0.31777485859767185,
+      "plasticity": 0.2940545678166526,
+      "w": 0.18975859768773362,
       "enabled": true
     },
     {
@@ -487,8 +486,8 @@ window.CHAMPION = {
       "from": 15,
       "to": 23,
       "recurrent": false,
-      "plasticity": 0.09462673176686204,
-      "w": -2.8045230072218157,
+      "plasticity": -0.16984305537668667,
+      "w": -3.5412707902946625,
       "enabled": true
     },
     {
@@ -496,8 +495,8 @@ window.CHAMPION = {
       "from": 15,
       "to": 24,
       "recurrent": false,
-      "plasticity": 0.029072754047803906,
-      "w": 0.178981224333212,
+      "plasticity": 0,
+      "w": -0.6589581127594127,
       "enabled": true
     },
     {
@@ -505,8 +504,8 @@ window.CHAMPION = {
       "from": 16,
       "to": 23,
       "recurrent": false,
-      "plasticity": -0.3492311187377947,
-      "w": -0.7929848971122746,
+      "plasticity": 0,
+      "w": -0.27835172180249035,
       "enabled": true
     },
     {
@@ -514,8 +513,8 @@ window.CHAMPION = {
       "from": 16,
       "to": 24,
       "recurrent": false,
-      "plasticity": -0.1665302066127849,
-      "w": -0.16841387536562646,
+      "plasticity": -0.035751196829545376,
+      "w": -0.13001919468221132,
       "enabled": true
     },
     {
@@ -524,7 +523,7 @@ window.CHAMPION = {
       "to": 23,
       "recurrent": false,
       "plasticity": -0.024514126251242597,
-      "w": -0.0008362373246553531,
+      "w": -0.449494267428716,
       "enabled": true
     },
     {
@@ -532,8 +531,8 @@ window.CHAMPION = {
       "from": 17,
       "to": 24,
       "recurrent": false,
-      "plasticity": 0.23624160527745303,
-      "w": 0.5812906657900838,
+      "plasticity": -0.04434266390490589,
+      "w": 1.0414442600784488,
       "enabled": true
     },
     {
@@ -541,8 +540,8 @@ window.CHAMPION = {
       "from": 18,
       "to": 23,
       "recurrent": false,
-      "plasticity": 0.04169325808950628,
-      "w": 1.7118748173589076,
+      "plasticity": 0,
+      "w": 0.9133123884673151,
       "enabled": true
     },
     {
@@ -551,7 +550,7 @@ window.CHAMPION = {
       "to": 24,
       "recurrent": false,
       "plasticity": 0,
-      "w": -0.15667378188483713,
+      "w": 0.39207355329380605,
       "enabled": true
     },
     {
@@ -559,8 +558,8 @@ window.CHAMPION = {
       "from": 19,
       "to": 23,
       "recurrent": false,
-      "plasticity": -0.14143479117062147,
-      "w": 0.9511323953281375,
+      "plasticity": -0.25412757856690343,
+      "w": 0.29704445451148487,
       "enabled": true
     },
     {
@@ -569,7 +568,7 @@ window.CHAMPION = {
       "to": 24,
       "recurrent": false,
       "plasticity": 0.030618064293117895,
-      "w": 0.4462012392868745,
+      "w": 0.8192528565351456,
       "enabled": true
     },
     {
@@ -577,8 +576,8 @@ window.CHAMPION = {
       "from": 20,
       "to": 23,
       "recurrent": false,
-      "plasticity": -0.0711411154611931,
-      "w": 0.09025844956291851,
+      "plasticity": 0.15407883002893674,
+      "w": 0,
       "enabled": true
     },
     {
@@ -586,8 +585,8 @@ window.CHAMPION = {
       "from": 20,
       "to": 24,
       "recurrent": false,
-      "plasticity": -0.21477891295961507,
-      "w": 0.15200927502385123,
+      "plasticity": 0,
+      "w": 0.4688676272750956,
       "enabled": true
     },
     {
@@ -595,8 +594,8 @@ window.CHAMPION = {
       "from": 21,
       "to": 23,
       "recurrent": false,
-      "plasticity": -0.053934565010941966,
-      "w": 1.8189010195158315,
+      "plasticity": -0.053244756985001265,
+      "w": 2.1786568405452984,
       "enabled": true
     },
     {
@@ -604,8 +603,8 @@ window.CHAMPION = {
       "from": 21,
       "to": 24,
       "recurrent": false,
-      "plasticity": -0.0882122168337163,
-      "w": -0.640119029783267,
+      "plasticity": 0.12388924266796328,
+      "w": 0.1587644086607054,
       "enabled": true
     },
     {
@@ -622,7 +621,7 @@ window.CHAMPION = {
       "from": 22,
       "to": 24,
       "recurrent": false,
-      "plasticity": 0.041801424395166493,
+      "plasticity": -0.06154088293551246,
       "w": 0.5353629723520875,
       "enabled": true
     },
@@ -640,70 +639,70 @@ window.CHAMPION = {
       "from": 26,
       "to": 23,
       "recurrent": false,
-      "plasticity": 0.013519358149646886,
-      "w": -0.8281683978419544,
+      "plasticity": 0,
+      "w": -0.7304214597399568,
       "enabled": true
     },
     {
-      "inn": 95,
-      "from": 13,
-      "to": 30,
+      "inn": 143,
+      "from": 22,
+      "to": 26,
       "recurrent": false,
-      "plasticity": -0.09857877822496193,
-      "w": -0.3712672623603141,
+      "plasticity": 0.08954611373093181,
+      "w": -0.6124334354506541,
       "enabled": true
     }
   ],
   "critic": {
     "w": [
       0.6191340139536703,
-      0.6509222137083456,
-      -23.03619605677744,
+      0.579789866517612,
+      -18.377749807811416,
       -0.6815184121535548,
-      0.028371076493823106,
-      -1.1723487123758245,
-      -7.000450378215754,
-      0.05397549783186093,
+      0.01512568857969963,
+      -2.499661827589871,
+      -3.991739882984677,
+      0.014641730900546795,
       0.02187516332170379
     ],
     "u": [
-      -0.3840283332138917,
-      0.2054584376317595,
-      -0.08354373305490947,
-      -0.8769290337470381,
-      0.16931111903211088,
+      -0.2698965611612457,
+      -0.14169555001470877,
+      -0.4226789086380882,
+      -1.0247951714180399,
+      0.28473435983824247,
       0.008356210635998354,
-      -0.008244699342122408,
-      -0.3580766395668954,
-      0.6016275339224573,
-      -0.37029464049383776,
+      -0.10039279307900245,
+      -0.023748508591355466,
+      0.10823654065412686,
+      -0.08278627468850325,
       0.19305893452080342,
       -0.3435110321335804,
-      0.38306383262648447,
-      0.20323706315544893,
-      0.5543128046651749,
-      0.7967108298784136,
-      1.0479238673690348,
-      -0.6092560252222916,
-      -0.7383418767504437,
-      0.1590067308524324,
-      0.32703499125528646,
-      -0.04361917594429371,
-      -0.7588826508873824,
+      0.8107237050716469,
+      0.30701976446149126,
+      0.6583336064297216,
+      0.8333100377117154,
+      0.7344444644233343,
+      -1.0284906000488208,
+      -0.7988979508811003,
+      0.0200862941031274,
+      0.28630616592591257,
+      -0.4975135026089672,
+      -0.6869560104086625,
       0.19522178651777505,
-      -0.2009942170002173,
-      -1.4027136619004867,
-      1.2737418705767822
+      -0.27412982361293137,
+      -0.14260498554816087,
+      1.2398135819392613
     ],
     "b": [
-      0.005581842288092276,
-      0.10744302511922105,
+      0.04915020325953395,
+      0.4983706815683128,
       0.9133652615668286
     ],
     "v": [
-      -0.06271448691393926,
-      -0.030887998941521222,
+      0,
+      -0.1767919160032972,
       0.8238797673321107
     ]
   }
-};
+}

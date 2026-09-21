@@ -9,6 +9,7 @@
 <br>
 
 <a href="https://fishtank-ai.vercel.app/"><img src="https://img.shields.io/badge/%E2%96%B6%20%20PLAY%20IT%20LIVE-fishtank--ai.vercel.app-6fe3c6?style=for-the-badge&labelColor=0d324a" alt="Play it live"></a>
+<a href="https://www.ixender.com"><img src="https://img.shields.io/badge/author-www.ixender.com-e6f4f1?style=for-the-badge&labelColor=0d324a" alt="www.ixender.com"></a>
 
 <br><br>
 
@@ -348,7 +349,7 @@ flowchart TB
 
 <br><br>
 
-<sub>MIT licensed · built with <a href="https://claude.com/claude-code">Claude Code</a> · UI pass with <a href="https://github.com/nextlevelbuilder/ui-ux-pro-max-skill">ui-ux-pro-max</a> (not vendored)</sub>
+<a href="https://www.ixender.com"><img src="https://img.shields.io/badge/made%20by-www.ixender.com-e6f4f1?style=for-the-badge&labelColor=0d324a" alt="www.ixender.com"></a>
 
 <img src="https://capsule-render.vercel.app/api?type=waving&color=0:1b6b73,50:0d324a,100:03101a&height=120&section=footer" alt="" width="100%">
 
