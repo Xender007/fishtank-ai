@@ -2,123 +2,161 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Fish, Shark, and a Brain</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Fish vs Shark — neural networks from scratch</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-  <h1>Coordinated escape &mdash; scouts, schools, and shared alarms</h1>
-  <div id="training-note" class="legend">Loading the saved champion...</div>
+  <!-- ======================================================================
+       TOP BAR - title, live status line and every headline number.
+       ====================================================================== -->
+  <header id="topbar">
+    <div class="brand">
+      <h1><span class="brand-mark" aria-hidden="true"></span>Fish vs shark</h1>
+      <p id="training-note">Loading the saved champion...</p>
+    </div>
 
-  <div id="hud">
-    <span>gen <b id="gen">1</b></span>
-    <span>alive <b id="alive">0</b>/<b id="total">0</b></span>
-    <span>time <b id="time">0.0</b>s</span>
-    <span>mean <b id="mean">&ndash;</b></span>
-    <span>best <b id="best">&ndash;</b></span>
-    <span>params <b id="params">0</b></span>
-    <span>hidden <b id="hidden">0</b></span>
-    <span>species <b id="species">1</b></span>
-    <span>evolving <b id="evolving" class="off">OFF</b></span>
-    <span>spread <b id="diversity">&ndash;</b></span>
-    <span>shoal <b id="shoal">&ndash;</b></span>
-    <span>packs <b id="packs">0</b></span>
-    <span>young <b id="young">0</b></span>
-    <span>births <b id="births">0</b></span>
-    <span>eaten <b id="eaten">0</b></span>
-    <span>shark <b id="shark-hud">brainless</b></span>
-    <span>speed <b id="speed">1&times;</b></span>
-    <span id="paused">PAUSED</span>
-  </div>
-  <div class="hudrow sub">
-    <span class="hint">
-      <b>click a fish</b> to pin it &middot; <b>click a neuron</b> for its working &middot;
-      <b>n</b> = step the forward pass &middot; <b>1 2 3 4</b> = speed &middot;
-      g = breed now &middot; space = pause &middot; s = step time &middot;
-      v = rays &middot; l = lineage &middot; <b>k</b> = shark brain on/off &middot; <b>e</b> = evolution on/off &middot; b = brain (<b id="mode">&mdash;</b>) &middot; r = restart
-    </span>
-  </div>
+    <div id="hud" role="status" aria-label="Simulation status">
+      <span>gen <b id="gen">1</b></span>
+      <span>alive <b><i id="alive">0</i><small>/<i id="total">0</i></small></b></span>
+      <span>eaten <b id="eaten">0</b></span>
+      <span>births <b id="births">0</b></span>
+      <span class="minor">young <b id="young">0</b></span>
+      <span>time <b><i id="time">0.0</i><small>s</small></b></span>
+      <span>mean <b id="mean">&ndash;</b></span>
+      <span>best <b id="best">&ndash;</b></span>
+      <span>params <b id="params">0</b></span>
+      <span class="minor">hidden <b id="hidden">0</b></span>
+      <span class="minor">species <b id="species">1</b></span>
+      <span>evolving <b id="evolving" class="off">OFF</b></span>
+      <span class="minor">spread <b id="diversity">&ndash;</b></span>
+      <span class="minor">shoal <b id="shoal">&ndash;</b></span>
+      <span>packs <b id="packs">0</b></span>
+      <span>shark <b id="shark-hud">brainless</b></span>
+      <span>speed <b id="speed">1&times;</b></span>
+      <span id="paused">paused</span>
+    </div>
 
-  <div id="stage">
-    <div id="left">
-      <canvas id="sea"></canvas>
+    <details id="keys">
+      <summary>keys</summary>
+      <div class="hint">
+        <dl>
+          <dt>click fish</dt><dd>pin it</dd>
+          <dt>click neuron</dt><dd>show its working</dd>
+          <dt>space</dt><dd>pause</dd>
+          <dt>s</dt><dd>step one tick</dd>
+          <dt>1 2 3 4</dt><dd>speed 1&times; 5&times; 20&times; 100&times;</dd>
+          <dt>n</dt><dd>step the forward pass</dd>
+          <dt>k</dt><dd>shark brain on / off</dd>
+          <dt>e</dt><dd>evolution on / off</dd>
+          <dt>g</dt><dd>breed now</dd>
+          <dt>v</dt><dd>all rays</dd>
+          <dt>l</dt><dd>lineage colours</dd>
+          <dt>b</dt><dd>brain: <b id="mode">&mdash;</b></dd>
+          <dt>r</dt><dd>restart</dd>
+        </dl>
+      </div>
+    </details>
+  </header>
 
-      <!-- The shark's optional brain. Right under the tank, because it is
-           steering the thing you are watching. -->
-      <section id="sharkpanel">
-        <div id="sharkcontrols">
-          <h2>shark brain</h2>
-          <button id="btn-shark-brain" class="toggle">SHARK BRAIN: OFF</button>
-          <button id="btn-shark-train" class="toggle on">SELF-TRAINING: ON</button>
-          <label class="sharkgen" for="shark-gen">brain generation</label>
-          <select id="shark-gen"></select>
-          <div class="hunger" title="Survival instinct: 10s without a meal and the shark dies">
-            <span>hunger</span>
-            <div class="hunger-track"><div id="hunger-bar"></div></div>
-            <b id="hunger-val">&ndash;</b>
-          </div>
-          <div id="shark-status" class="note"></div>
-          <div id="shark-train-note" class="note"></div>
+  <!-- ======================================================================
+       FIRST SCREEN - the tank, as large as the window allows, beside the
+       fish inspector. The simulation is still 900x600 inside; only the
+       picture is scaled (see fitAllCanvases in main.js).
+       ====================================================================== -->
+  <main id="stage">
+    <section id="tankcol" aria-label="The tank">
+      <div id="tankwrap"><canvas id="sea"></canvas></div>
+    </section>
+
+    <aside id="panel" aria-label="Fish inspector">
+
+      <section class="card" aria-labelledby="h-inputs">
+        <header class="card-head">
+          <h2 id="h-inputs">Inputs</h2>
+          <span id="focus-note" class="card-sub">move the mouse over the tank</span>
+        </header>
+        <!-- Each status line hides itself when it has nothing to say. -->
+        <div id="fishstatus">
+          <div id="social-note" class="note"></div>
+          <div id="perception-note" class="note"></div>
+          <div id="plan-note" class="note"></div>
         </div>
-        <div id="sharkbrainwrap">
-          <div id="sharkmeta">&mdash;</div>
-          <canvas id="sharkbrain"></canvas>
+        <div id="senses"></div>
+        <details class="legend-details">
+          <summary>what the overlays mean</summary>
+          <p class="legend">
+            Gold &alpha; = pack scout &middot; matching rings = pack mates &middot;
+            orange rings = threat warning. Shaded fan = scanning vision &middot;
+            inner circle = close-range sensing. Solid red contact = a sighting
+            &middot; dashed red = a remembered warning. Dotted gold line = the
+            focused fish's planned dodge and exit.
+          </p>
+        </details>
+      </section>
+
+      <section class="card" aria-labelledby="h-brain">
+        <header class="card-head">
+          <h2 id="h-brain">The brain</h2>
+          <span id="brainmeta" class="card-sub">&mdash;</span>
+        </header>
+        <div id="brainwrap" class="canvas-well"><canvas id="brain"></canvas></div>
+        <p class="legend">
+          The learned reflex. Schooling, shared memory and escape-route
+          prediction also steer the final movement. Dashed = a gene switched off
+          but still inherited.
+        </p>
+      </section>
+
+      <section class="card" aria-labelledby="h-math">
+        <header class="card-head">
+          <h2 id="h-math">How <i id="m-title">turn</i> was computed</h2>
+          <span class="card-sub">input &times; weight</span>
+        </header>
+        <div id="math"></div>
+        <div class="mtotals">
+          <div class="mrow"><span class="mlabel">bias</span><span class="mtot" id="m-bias">+0.00</span></div>
+          <div class="mrow strong"><span class="mlabel">sum</span><span class="mtot" id="m-sum">+0.00</span></div>
+          <div class="mrow strong out"><span class="mlabel">tanh &rarr;</span><span class="mtot" id="m-out">+0.00</span></div>
         </div>
       </section>
 
-      <canvas id="chart"></canvas>
-    </div>
+    </aside>
+  </main>
 
-    <aside id="panel">
-      <h2>inputs <span id="focus-note">move the mouse over the tank</span></h2>
-
-      <!-- Live status for the focused fish. Each line hides itself when it has
-           nothing to say (see .note:empty in the stylesheet) - otherwise an
-           empty element still draws its card border and the panel fills up
-           with blank boxes. -->
-      <div id="fishstatus">
-        <div id="social-note" class="note"></div>
-        <div id="perception-note" class="note"></div>
-        <div id="plan-note" class="note"></div>
+  <!-- ======================================================================
+       BELOW THE TANK - the shark's brain, the training controls, the chart.
+       ====================================================================== -->
+  <section id="lower">
+    <section id="sharkpanel" class="card predator" aria-labelledby="h-shark">
+      <div id="sharkcontrols">
+        <header class="card-head">
+          <h2 id="h-shark">Shark brain</h2>
+        </header>
+        <button id="btn-shark-brain" class="toggle">SHARK BRAIN: OFF</button>
+        <button id="btn-shark-train" class="toggle on">SELF-TRAINING: ON</button>
+        <label class="field-label" for="shark-gen">brain generation</label>
+        <select id="shark-gen"></select>
+        <div class="hunger" title="Survival instinct: 10s without a meal and the shark dies">
+          <span>hunger</span>
+          <div class="hunger-track"><div id="hunger-bar"></div></div>
+          <b id="hunger-val">&ndash;</b>
+        </div>
+        <div id="shark-status" class="note"></div>
+        <div id="shark-train-note" class="note"></div>
       </div>
-
-      <div id="senses"></div>
-
-      <details class="legend-details">
-        <summary>what the overlays mean</summary>
-        <p class="legend">
-          Gold &alpha; = pack scout &middot; matching rings = pack mates &middot;
-          orange rings = threat warning.<br>
-          Shaded fan = scanning vision &middot; inner circle = close-range sensing.<br>
-          Solid red contact = a sighting &middot; dashed red = a remembered warning.<br>
-          Dotted gold line = the focused fish's planned dodge and exit.
-        </p>
-      </details>
-
-      <h2 class="spaced">the brain</h2>
-      <p class="legend">The graph shows the learned reflex. Schooling, shared memory, and escape-route prediction also guide the final movement.</p>
-      <div id="brainmeta">&mdash;</div>
-      <div id="brainwrap"><canvas id="brain"></canvas></div>
-      <p class="legend">
-        <span class="sw dot-pos"></span> firing positive &nbsp;
-        <span class="sw dot-neg"></span> negative<br>
-        <span class="sw line-pos"></span> positive weight &nbsp;
-        <span class="sw line-neg"></span> negative &mdash; thickness = strength<br>
-        dashed = a gene switched off but still inherited
-      </p>
-
-      <h2 class="spaced">how <i id="m-title">turn</i> was computed</h2>
-      <div id="math"></div>
-      <div class="mtotals">
-        <div class="mrow"><span class="mlabel">bias</span><span class="mtot" id="m-bias">+0.00</span></div>
-        <div class="mrow strong"><span class="mlabel">sum</span><span class="mtot" id="m-sum">+0.00</span></div>
-        <div class="mrow strong out"><span class="mlabel">tanh &rarr;</span><span class="mtot" id="m-out">+0.00</span></div>
+      <div id="sharkbrainwrap">
+        <p id="sharkmeta" class="card-sub">&mdash;</p>
+        <div class="canvas-well"><canvas id="sharkbrain"></canvas></div>
       </div>
+    </section>
 
-      <h2 class="spaced">structural mutations</h2>
-      <div id="mutlog"></div>
-
-      <h2 class="spaced">improve the brain</h2>
+    <aside id="controls" class="card training" aria-labelledby="h-train">
+      <header class="card-head">
+        <h2 id="h-train">Improve the fish brain</h2>
+      </header>
       <div id="evolvebar">
         <button id="btn-evolve" class="toggle">auto-improve: OFF</button>
         <button id="btn-warm" class="toggle on">generation 1: champion</button>
@@ -127,7 +165,9 @@
       </div>
       <div id="evolve-note" class="note"></div>
 
-      <h2 class="spaced">keep a brain</h2>
+      <header class="card-head divided">
+        <h2>Keep a brain</h2>
+      </header>
       <div id="savebar">
         <button id="btn-save">save best</button>
         <button id="btn-load">load file</button>
@@ -136,18 +176,36 @@
         <button id="btn-random">start random</button>
         <input type="file" id="file-load" accept="application/json" hidden>
       </div>
-      <div id="savenote"></div>
-      <p class="legend dim">
-        Kin senses are built but ship <b>off</b> &mdash; measured, they cost
-        fitness and produced no schooling. Flip
-        <b>senses.neighbours</b> in js/config.js to explore them.<br><br>
-        The champion of each generation is stored in this browser automatically,
-        so a refresh no longer throws the run away. <b>Save best</b> writes a
-        JSON file &mdash; open it in a text editor: a list of numbers and a list
-        of which node feeds which. That is the whole learned behaviour.
-      </p>
+      <div id="savenote" role="status"></div>
+      <details class="legend-details">
+        <summary>about saving</summary>
+        <p class="legend">
+          The champion of each generation is stored in this browser automatically,
+          so a refresh does not throw the run away. <b>Save best</b> writes a JSON
+          file: a list of numbers and a list of which node feeds which. That is
+          the whole learned behaviour. Kin senses are built but ship <b>off</b>
+          &mdash; measured, they cost fitness and produced no schooling. Flip
+          <b>senses.neighbours</b> in js/config.js to explore them.
+        </p>
+      </details>
     </aside>
-  </div>
+
+    <section id="mutcard" class="card training" aria-labelledby="h-mut">
+      <header class="card-head">
+        <h2 id="h-mut">Structural mutations</h2>
+        <span class="card-sub">newest first</span>
+      </header>
+      <div id="mutlog"></div>
+    </section>
+
+    <section id="chartcard" class="card" aria-labelledby="h-chart">
+      <header class="card-head">
+        <h2 id="h-chart">Survival &amp; brain size per generation</h2>
+        <span class="card-sub">hover for values</span>
+      </header>
+      <canvas id="chart"></canvas>
+    </section>
+  </section>
 
   <!--
        LOAD ORDER MATTERS. Plain scripts, not ES modules, because browsers

@@ -23,14 +23,30 @@ const chartCtx = chartCanvas.getContext("2d");
 // routine then keeps working in logical coordinates and knows nothing about any
 // of this.
 // -----------------------------------------------------------------------------
-function fitCanvas(cv, ctx, w, h) {
-  const dpr = window.devicePixelRatio || 1;
-  cv.style.width = w + 'px';
-  cv.style.height = h + 'px';
-  cv.width = Math.round(w * dpr);
-  cv.height = Math.round(h * dpr);
-  // setTransform, not scale: this runs again on zoom and must not compound.
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+// `displayW` is how wide the canvas should LOOK, in CSS pixels. The drawing
+// code never finds out: it keeps working in its logical w x h, and the context
+// transform absorbs both the display scale and the device pixel ratio. That is
+// how the tank can fill the window while the simulation stays 900 x 600 inside
+// - no physics number, trained brain or measurement changes with screen size.
+//
+// `maxPixels` caps the buffer. A tank blown up to 1400px on a 2x display would
+// be a 5.6-megapixel canvas redrawn every frame; beyond the cap the buffer
+// stops growing and the browser scales the last bit, which costs a little
+// sharpness instead of the frame rate (see the ecosystem-mode measurements).
+function fitCanvas(cv, ctx, w, h, displayW, maxPixels) {
+  const dw = Math.max(1, Math.round(displayW || w));
+  const dh = Math.round(dw * h / w);
+  let ratio = window.devicePixelRatio || 1;
+  if (maxPixels && dw * dh * ratio * ratio > maxPixels) ratio = Math.sqrt(maxPixels / (dw * dh));
+  const bw = Math.round(dw * ratio), bh = Math.round(dh * ratio);
+  if (cv.width !== bw || cv.height !== bh || cv.style.width !== dw + 'px') {
+    cv.style.width = dw + 'px';
+    cv.style.height = dh + 'px';
+    cv.width = bw;
+    cv.height = bh;
+  }
+  // setTransform, not scale: this runs again on resize and must not compound.
+  ctx.setTransform(bw / w, 0, 0, bh / h, 0, 0);
 }
 
 // Logical sizes. Everything downstream draws against these, never against
@@ -39,7 +55,7 @@ const VIEW_SIZE = {
   sea:   { w: CONFIG.tank.w, h: CONFIG.tank.h },
   chart: { w: CONFIG.tank.w, h: 236 },
   brain: { w: 408, h: 452 },
-  sharkBrain: { w: 470, h: 300 },
+  sharkBrain: { w: 470, h: 430 },
 };
 
 // Moving the window between monitors with different pixel densities changes
@@ -51,17 +67,63 @@ const VIEW_SIZE = {
 const REDUCED_MOTION = !!(window.matchMedia &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
+// -----------------------------------------------------------------------------
+// LAYOUT - every canvas sized to the box the page gives it.
+// -----------------------------------------------------------------------------
+// The tank gets the largest 3:2 rectangle that fits its column on the first
+// screen; the side canvases simply take their container's width. Each
+// container's size comes from the CSS grid, never from the canvas inside it,
+// so resizing a canvas can never feed back into another resize.
+function contentWidth(el) {
+  const cs = getComputedStyle(el);
+  return el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+}
+
 function fitAllCanvases() {
-  fitCanvas(canvas, ctx, VIEW_SIZE.sea.w, VIEW_SIZE.sea.h);
+  // The sticky header's real height, so the first screen is exactly the tank.
+  const top = document.getElementById('topbar');
+  if (top) document.documentElement.style.setProperty('--header-h', top.offsetHeight + 'px');
+
+  const wrap = document.getElementById('tankwrap');
+  const s = VIEW_SIZE.sea;
+  const scale = wrap ? Math.max(0.3, Math.min(wrap.clientWidth / s.w, wrap.clientHeight / s.h)) : 1;
+  fitCanvas(canvas, ctx, s.w, s.h, s.w * scale, 4.2e6);
+
+  // The chart and the two brain diagrams are NOT magnified - scaling them up
+  // just made their text huge. Their draw functions take a width, so they get
+  // a real, wider logical canvas and lay themselves out across it at normal
+  // text size. Hit-testing reads VIEW_SIZE, so it follows automatically.
+  const widen = (id, size, min) => {
+    const el = document.getElementById(id);
+    if (el) size.w = Math.max(min, Math.floor(contentWidth(el)));
+  };
+  widen('chartcard', VIEW_SIZE.chart, 320);
   fitCanvas(chartCanvas, chartCtx, VIEW_SIZE.chart.w, VIEW_SIZE.chart.h);
   if (typeof brainCanvas !== 'undefined') {
+    widen('brainwrap', VIEW_SIZE.brain, 300);
     fitCanvas(brainCanvas, brainCtx, VIEW_SIZE.brain.w, VIEW_SIZE.brain.h);
   }
   if (typeof sharkCanvas !== 'undefined') {
+    widen('sharkbrainwrap', VIEW_SIZE.sharkBrain, 300);
     fitCanvas(sharkCanvas, sharkCtx, VIEW_SIZE.sharkBrain.w, VIEW_SIZE.sharkBrain.h);
   }
 }
-window.addEventListener('resize', fitAllCanvases);
+
+// One refit per animation frame at most, however many resize events arrive.
+let fitQueued = false;
+function queueFit() {
+  if (fitQueued) return;
+  fitQueued = true;
+  requestAnimationFrame(() => { fitQueued = false; fitAllCanvases(); });
+}
+window.addEventListener('resize', queueFit);
+if (typeof ResizeObserver !== 'undefined') {
+  const ro = new ResizeObserver(queueFit);
+  for (const id of ['tankwrap', 'chartcard', 'brainwrap', 'sharkbrainwrap', 'topbar']) {
+    const el = document.getElementById(id);
+    if (el) ro.observe(el);
+  }
+}
 
 
 // Taller than before: the chart now carries two stacked panels (survival and

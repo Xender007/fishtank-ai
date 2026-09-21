@@ -1,760 +1,664 @@
-* { box-sizing: border-box; }
+/* =============================================================================
+   style.css - one design system for the whole page.
+   =============================================================================
+   Rewritten from scratch after the layered stylesheet (each stage added its
+   own overrides on top of the last) turned the inspector into a stack of
+   boxes-inside-boxes: a heading in one card, its body in another, the brain
+   canvas framed twice.
+
+   Direction, from the ui-ux-pro-max data: "Data-Dense Dashboard" with a
+   "Real-Time Monitoring" layer, dark mode. What that means here:
+     - ONE card component: a header (title + muted note) and a body. Nothing
+       else draws a border.
+     - Tokens for every colour, space and radius. No raw hex below :root.
+     - A 4px spacing scale (4 8 12 16 24), a small type scale (11 12 13 15),
+       tabular figures for anything that updates live.
+     - Text contrast >= 4.5:1 on its surface - muted text is a colour, never
+       an opacity (opacity quietly drops contrast below the line).
+     - Hit targets >= 44px, visible keyboard focus, reduced motion honoured.
+     - Colour always backed by text or position: prey = teal, predator = rose,
+       training = violet, warning = amber, and every one also has a label.
+
+   The tank is the subject. The first screen is the tank at the largest 3:2
+   size that fits, beside the inspector; the rest is instrumentation below.
+   ============================================================================= */
+
+/* ---- tokens --------------------------------------------------------------- */
+:root {
+  color-scheme: dark;
+
+  --bg:            #050d14;
+  --surface:       #0b1a25;   /* cards */
+  --surface-2:     #0f2231;   /* controls, raised */
+  --inset:         #07131c;   /* wells, tracks, notes */
+  --border:        #173649;
+  --border-strong: #26597a;
+
+  --text:          #b3d0de;   /* 10.6:1 on surface */
+  --text-muted:    #7ea2b4;   /*  6.1:1 on surface */
+  --text-faint:    #5d8194;   /*  4.5:1 on surface - labels only */
+  --text-strong:   #eef8fc;
+
+  --prey:          #6fe3c6;
+  --prey-deep:     #1d6f5e;
+  --predator:      #f2879a;
+  --predator-deep: #7a2740;
+  --training:      #a79cf2;
+  --info:          #62d6ec;
+  --warn:          #ffc861;
+  --danger:        #ff8095;
+  --pos:           #ff9d4d;   /* neuron firing positive (matches the canvas) */
+  --neg:           #4da6ff;   /* neuron firing negative */
+
+  --s1: 4px;  --s2: 8px;  --s3: 12px;  --s4: 16px;  --s5: 24px;
+  --r-sm: 6px;  --r-md: 8px;  --r-lg: 10px;
+
+  --fs-xs: 11px;  --fs-sm: 12px;  --fs-md: 13px;  --fs-lg: 15px;
+  --font: ui-monospace, "Cascadia Mono", Consolas, "SFMono-Regular", Menlo, monospace;
+
+  --panel-w:  clamp(360px, 25vw, 480px);   /* inspector; the tank takes the rest */
+  --header-h: 60px;                        /* measured and overwritten by main.js */
+  --gutter:   var(--s4);
+  --z-header: 20;
+  --z-popover: 40;
+
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.02) inset, 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* ---- base ----------------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--header-h) + var(--s2));
+}
 
 body {
   margin: 0;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  background: #061018;
-  color: #9fc4d6;
-  font: 14px/1.5 ui-monospace, Consolas, monospace;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  background:
+    radial-gradient(1200px 600px at 30% -10%, rgba(38, 89, 122, 0.18), transparent 70%),
+    var(--bg);
+  color: var(--text);
+  font: var(--fs-md)/1.5 var(--font);
+  -webkit-font-smoothing: antialiased;
 }
 
-h1 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+h1, h2, p { margin: 0; }
+b { color: var(--text-strong); font-weight: 600; }
+i { font-style: normal; }
+canvas { display: block; }
+::selection { background: rgba(111, 227, 198, 0.3); }
+
+:focus-visible {
+  outline: 2px solid var(--prey);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+
+/* ---- top bar -------------------------------------------------------------- */
+#topbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-header);
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  padding: var(--s2) var(--gutter);
+  background: #07121b;          /* solid: a blur over a live canvas costs frames */
+  border-bottom: 1px solid var(--border);
+}
+
+.brand { flex: 0 1 320px; min-width: 200px; }
+
+.brand h1 {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #6fe3c6;
+  color: var(--text-strong);
 }
 
-#hud, .hudrow {
-  display: flex;
-  gap: 22px;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: center;
-  width: 900px;
-  max-width: 100%;
-}
-
-#hud b, .hudrow b { color: #ffffff; font-weight: 600; }
-
-#paused { color: #ffc861; }
-
-.hint { margin-left: auto; opacity: 0.55; }
-
-canvas {
-  border-radius: 4px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
-  max-width: 100%;
-}
-
-/* ---------------------------------------------------------------------------
-   Stage 1: the sense readout panel
-   --------------------------------------------------------------------------- */
-
-#stage {
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
-}
-
-#panel {
-  width: 300px;
-  padding: 14px 16px;
-  background: #0a1a26;
-  border: 1px solid #16394f;
-  border-radius: 4px;
-}
-
-#panel h2 {
-  margin: 0 0 2px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #6fe3c6;
-}
-
-#focus-note {
-  font-size: 11px;
-  opacity: 0.6;
-  margin-bottom: 12px;
-  min-height: 16px;
-}
-
-.sense {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.sense-name {
-  width: 74px;
-  font-size: 11px;
-  opacity: 0.75;
+/* Two dots: prey and predator, the whole project in one mark. */
+.brand-mark {
+  width: 14px;
+  height: 8px;
   flex: none;
+  background:
+    radial-gradient(circle at 3px 4px, var(--prey) 2.6px, transparent 3px),
+    radial-gradient(circle at 10px 4px, var(--predator) 3.4px, transparent 3.8px);
 }
 
-.sense-track {
-  flex: 1;
-  height: 9px;
-  background: #06222f;
-  border-radius: 5px;
+#training-note {
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-/* The bar width is set from the live sense value every frame. */
-.sense-bar {
-  height: 100%;
-  width: 0;
-  border-radius: 5px;
-  transition: width 60ms linear;
-}
-
-.is-ray   { background: linear-gradient(90deg, #7a2740, #ff8095); }
-.is-wall  { background: linear-gradient(90deg, #7a5a20, #ffc861); }
-.is-speed { background: linear-gradient(90deg, #1d6f5e, #6fe3c6); }
-
-.sense-val {
-  width: 30px;
-  text-align: right;
-  font-size: 11px;
-  color: #ffffff;
-  flex: none;
-}
-
-.legend {
-  margin: 14px 0 0;
-  font-size: 10.5px;
-  line-height: 1.7;
-  opacity: 0.7;
-}
-
-.legend.dim { opacity: 0.45; border-top: 1px solid #16394f; padding-top: 10px; }
-
-/* Small colour swatches in the legend. */
-.sw {
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
-  margin-right: 5px;
-  vertical-align: baseline;
-}
-
-/* ---------------------------------------------------------------------------
-   Stage 2: the neuron's arithmetic
-   --------------------------------------------------------------------------- */
-
-#hud b.on  { color: #6fe3c6; }
-#hud b.off { color: #ff8095; }
-
-h2.spaced {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid #16394f;
-}
-
-#math-mode {
-  font-size: 11px;
-  opacity: 0.6;
-  margin-bottom: 8px;
-}
-
-/* Six columns: label, input, x, weight, =, product. Fixed widths so the
-   numbers form clean vertical columns like a worked sum on paper. */
-.mrow {
-  display: grid;
-  grid-template-columns: 66px 34px 10px 40px 10px 46px;
-  gap: 4px;
-  align-items: center;
-  font-size: 11px;
-  line-height: 1.75;
-}
-
-.mlabel { opacity: 0.7; }
-.mx     { text-align: right; color: #cfe8f4; }
-.msym   { text-align: center; opacity: 0.35; }
-.mw     { text-align: right; color: #9fc4d6; }
-.mp     { text-align: right; font-weight: 600; }
-
-/* A product earns colour only when it is actually doing something, so the two
-   or three senses genuinely steering the fish jump out of the list. */
-.mp.zero { color: #3d5a68; }
-.mp.pos  { color: #6fe3c6; }
-.mp.neg  { color: #ff8095; }
-
-#math.idle { opacity: 0.3; }
-
-.mtotals {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid #16394f;
-}
-
-.mtotals .mrow { grid-template-columns: 66px 1fr; }
-.mtot { text-align: right; font-size: 11px; color: #cfe8f4; }
-.mrow.strong .mtot { font-weight: 700; color: #ffffff; font-size: 12px; }
-.mrow.out .mlabel  { color: #6fe3c6; opacity: 1; }
-.mrow.out .mtot    { color: #6fe3c6; }
-
-/* ---------------------------------------------------------------------------
-   Stage 3: signed activation bars
-   --------------------------------------------------------------------------- */
-
-.sense-track { position: relative; }
-
-/* A faint centre line, so a signed bar visibly grows out from zero. */
-.sense-track.signed::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: rgba(159, 196, 214, 0.28);
-}
-
-.sbar {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  border-radius: 3px;
-  transition: width 60ms linear, left 60ms linear;
-}
-
-/* The activation colour language, reused by the Stage 6 brain inspector:
-   orange means a neuron is firing positive, blue means negative. */
-.sbar.pos   { background: #ff9d4d; }
-.sbar.neg   { background: #4da6ff; }
-.sbar.plain { background: #6fe3c6; }
-
-#netpanel.idle, #math.idle { opacity: 0.3; }
-
-#panel i { color: #6fe3c6; font-style: normal; }
-
-/* ---------------------------------------------------------------------------
-   Stage 4: the fitness chart
-   --------------------------------------------------------------------------- */
-
-#left {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-#chart {
-  border-radius: 4px;
-  border: 1px solid #16394f;
-  max-width: 100%;
-}
-
-.hudrow.sub { margin-top: -8px; }
-.hudrow.sub .hint { margin-left: 0; }
-
-/* ---------------------------------------------------------------------------
-   Stages 6 & 7: the brain inspector and the mutation log
-   --------------------------------------------------------------------------- */
-
-/* Wide enough for the brain diagram, which is the panel's main event. */
-#panel { width: 440px; }
-
-#brainmeta {
-  font-size: 10.5px;
-  opacity: 0.65;
-  margin-bottom: 6px;
-}
-
-#brainwrap { line-height: 0; }
-#brainwrap.idle { opacity: 0.25; }
-
-#brain {
-  border: 1px solid #16394f;
-  border-radius: 4px;
-  cursor: pointer;
-  max-width: 100%;
-}
-
-.sw.dot-pos  { background: #ff9d4d; border-radius: 50%; }
-.sw.dot-neg  { background: #4da6ff; border-radius: 50%; }
-.sw.line-pos { background: #60dc8c; height: 3px; width: 14px; border-radius: 2px; }
-.sw.line-neg { background: #ff6e82; height: 3px; width: 14px; border-radius: 2px; }
-
-.mnote {
-  font-size: 10.5px;
-  opacity: 0.45;
-  padding: 3px 0;
-}
-
-#m-title { color: #6fe3c6; font-style: normal; }
-
-/* --- mutation log --- */
-#mutlog {
-  max-height: 150px;
-  overflow-y: auto;
-  font-size: 10.5px;
-  line-height: 1.6;
-}
-
-.logrow { display: flex; gap: 8px; }
-.loggen { color: #4f7c93; width: 28px; flex: none; }
-.logtext.add { color: #6fe3c6; }
-.logtext.off { color: #ff8095; }
-
-/* ---------------------------------------------------------------------------
-   Stage 8: save / load controls
-   --------------------------------------------------------------------------- */
-
-#savebar {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-#savebar button {
-  flex: 1;
-  min-width: 82px;
-  padding: 6px 8px;
-  font: inherit;
-  font-size: 10.5px;
-  color: #9fc4d6;
-  background: #0f2b3b;
-  border: 1px solid #1d4a63;
-  border-radius: 3px;
-  cursor: pointer;
-}
-
-#savebar button:hover {
-  background: #14384c;
-  color: #6fe3c6;
-  border-color: #2f7d9b;
-}
-
-#savenote {
-  min-height: 15px;
-  margin-top: 6px;
-  font-size: 10.5px;
-  color: #6fe3c6;
-}
-
-/* ===========================================================================
-   UI refresh
-   ===========================================================================
-   Goals, in order: make the numbers scannable, give each panel section a
-   visible boundary, and stop the page fighting the canvases for attention.
-   The sea is the subject; everything else is instrumentation and should read
-   as instrumentation.
-   =========================================================================== */
-
-body {
-  padding: 18px 16px 32px;
-  justify-content: flex-start;
-}
-
-h1 {
-  font-size: 13px;
-  letter-spacing: 0.14em;
-  color: #7fd4ba;
-  opacity: 0.9;
-}
-
-/* --- HUD: a row of labelled stat chips, not a run-on sentence ------------- */
+/* The stats strip: labelled numbers, one row, wrapping rather than scrolling. */
 #hud {
-  gap: 0;
-  background: #0a1a26;
-  border: 1px solid #16394f;
-  border-radius: 6px;
-  padding: 2px;
-  width: auto;
-  max-width: 100%;
+  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  min-width: 0;
+  padding: 3px;
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
 }
 
 #hud > span {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  justify-content: center;
   gap: 1px;
-  padding: 7px 13px;
-  font-size: 9.5px;
-  letter-spacing: 0.07em;
+  padding: 3px 10px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  opacity: 0.55;
-  border-right: 1px solid rgba(22, 57, 79, 0.9);
+  color: var(--text-faint);
+  white-space: nowrap;
+  border-right: 1px solid var(--border);
 }
+#hud > span:last-of-type { border-right: none; }
 
-#hud > span:last-child { border-right: none; }
-
-/* The value itself carries the weight; the label above it stays recessive. */
 #hud b {
-  font-size: 14px;
+  font-size: var(--fs-md);
   letter-spacing: 0;
   text-transform: none;
-  opacity: 1;
+  font-variant-numeric: tabular-nums;   /* numbers must not jiggle as they change */
 }
+#hud small { font-size: var(--fs-xs); color: var(--text-muted); font-weight: 400; }
+#hud b.on  { color: var(--prey); }
+#hud b.off { color: var(--danger); }
 
 #paused {
-  color: #ffc861 !important;
-  opacity: 1 !important;
-  font-weight: 600;
-}
-
-.hudrow.sub {
-  margin-top: 4px;
-  opacity: 0.75;
-  font-size: 10.5px;
-}
-
-/* --- panel: sections as cards -------------------------------------------- */
-#panel {
-  padding: 0;
-  background: transparent;
-  border: none;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-height: none;
-}
-
-#panel > h2,
-#panel > div,
-#panel > p {
-  background: #0a1a26;
-  border: 1px solid #16394f;
-  border-radius: 6px;
-  padding: 12px 14px;
-  margin: 0;
-}
-
-/* A heading and the block under it are one card, so the border does not cut
-   between a title and the thing it titles. */
-#panel > h2 {
-  border-bottom: none;
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-  padding-bottom: 8px;
-  margin-top: 0;
-  padding-top: 12px;
-}
-
-#panel > h2 + div,
-#panel > h2 + p {
-  border-top: none;
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
-  padding-top: 4px;
-}
-
-h2.spaced { border-top: 1px solid #16394f !important; }
-
-#brainwrap { padding: 8px !important; line-height: 0; }
-#brain { width: 100%; height: auto; display: block; }
-
-canvas { display: block; }
-#sea, #chart { box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); }
-
-/* ---------------------------------------------------------------------------
-   Inputs panel
-   ---------------------------------------------------------------------------
-   The rule that matters: an element with nothing to say must not draw a box.
-   These notes are emptied whenever no fish is focused, and with cards on every
-   panel child that left a column of blank bordered rectangles.
-   --------------------------------------------------------------------------- */
-
-#panel > div:empty,
-.note:empty,
-.legend:empty { display: none !important; }
-
-#fishstatus {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-#fishstatus:empty { display: none; }
-
-.note {
-  font-size: 10.5px;
-  line-height: 1.5;
-  color: #9fc4d6;
-  padding: 6px 8px;
-  background: rgba(6, 34, 47, 0.75);
-  border-left: 2px solid #2f7d9b;
-  border-radius: 3px;
-}
-
-#social-note      { border-left-color: #6fe3c6; }
-#perception-note  { border-left-color: #62d6ec; }
-#plan-note        { border-left-color: #ffc861; }
-
-/* The focus state belongs beside the heading, not in a box of its own. */
-#focus-note {
-  float: right;
-  font-size: 9.5px;
-  font-weight: 400;
-  letter-spacing: 0.04em;
-  text-transform: none;
-  color: #9fc4d6;
-  opacity: 0.65;
-}
-
-/* --- sense rows ----------------------------------------------------------- */
-.sense { margin-bottom: 5px; }
-
-.sense-name {
-  width: 78px;
-  font-size: 10px;
-  letter-spacing: 0.02em;
-}
-
-.sense-track {
-  height: 10px;
-  background: #06222f;
-  box-shadow: inset 0 0 0 1px rgba(47, 125, 155, 0.35);
-}
-
-/* A row at zero recedes; a row carrying signal comes forward. With seven rows
-   and usually two of them live, this is what makes the live ones findable. */
-.sense.quiet { opacity: 0.4; }
-.sense.quiet .sense-val { color: #5b7f92; }
-
-.sense-val { font-variant-numeric: tabular-nums; }
-
-/* --- collapsible legend --------------------------------------------------- */
-.legend-details { font-size: 10.5px; }
-
-.legend-details > summary {
-  cursor: pointer;
-  color: #6fe3c6;
-  opacity: 0.7;
-  list-style: none;
-  padding: 2px 0;
-}
-
-.legend-details > summary::-webkit-details-marker { display: none; }
-.legend-details > summary::before { content: '\25B8  '; }
-.legend-details[open] > summary::before { content: '\25BE  '; }
-.legend-details > summary:hover { opacity: 1; }
-
-/* ---------------------------------------------------------------------------
-   Auto-improve controls
-   --------------------------------------------------------------------------- */
-
-#evolvebar {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-#evolvebar button {
-  padding: 8px 10px;
-  font: inherit;
-  font-size: 11px;
-  text-align: left;
-  color: #9fc4d6;
-  background: #0f2b3b;
-  border: 1px solid #1d4a63;
+  align-self: center;
+  margin-left: var(--s1);
+  padding: 2px var(--s2) !important;
+  color: var(--bg) !important;
+  background: var(--warn);
   border-radius: 4px;
+  font-weight: 700;
+  border-right: none !important;
+}
+
+/* The alive count flashes on every change: red for a loss, green for a birth. */
+@keyframes count-down { from { color: var(--danger); text-shadow: 0 0 10px rgba(255, 128, 149, 0.8); } }
+@keyframes count-up   { from { color: #6fe39a;       text-shadow: 0 0 10px rgba(111, 227, 154, 0.8); } }
+#alive.count-down { animation: count-down 900ms ease-out; }
+#alive.count-up   { animation: count-up 900ms ease-out; }
+
+/* Keyboard shortcuts: a disclosure that opens as a popover, never pushing
+   the tank down. */
+#keys { position: relative; flex: none; }
+
+#keys > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+  min-height: 40px;
+  padding: 0 var(--s3);
   cursor: pointer;
-  transition: background 120ms, border-color 120ms, color 120ms;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  transition: border-color 150ms, color 150ms;
+}
+#keys > summary::-webkit-details-marker { display: none; }
+#keys > summary::after { content: '\25BE'; color: var(--text-muted); }
+#keys > summary:hover,
+#keys[open] > summary { color: var(--prey); border-color: var(--border-strong); }
+
+#keys .hint {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--s2));
+  z-index: var(--z-popover);
+  width: 340px;
+  padding: var(--s3) var(--s4);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
 }
 
-#evolvebar button:hover { background: #14384c; border-color: #2f7d9b; }
-
-/* A toggle that is ON says so with colour AND a marker, so the state is not
-   carried by colour alone. */
-#evolvebar button.toggle::before { content: '\25CB  '; opacity: 0.6; }
-#evolvebar button.toggle.on::before { content: '\25CF  '; opacity: 1; }
-
-#evolvebar button.toggle.on {
-  color: #6fe3c6;
-  border-color: #2f7d9b;
-  background: #10323f;
-}
-
-#btn-restart { color: #ffc861; }
-
-#evolve-note {
-  border-left-color: #9085e9;
-  margin-top: 8px;
-}
-
-/* ===========================================================================
-   Accessibility and interaction pass
-   ===========================================================================
-   Audited against the ui-ux-pro-max guidelines installed in .claude/skills.
-   Four of its rules were being broken here:
-
-     #9  Reduced Motion       - constant animation with no way to opt out
-     #13 Transform Performance - bars animated `width`, which relayouts
-     #22 Touch Target Size     - buttons were ~30px tall
-     #23 Touch Spacing         - 6px gaps between adjacent targets
-   =========================================================================== */
-
-/* --- #22 / #23: targets you can actually hit --------------------------------- */
-#savebar button,
-#evolvebar button {
-  min-height: 44px;
-  padding: 10px 12px;
-}
-
-#savebar,
-#evolvebar { gap: 8px; }
-
-/* --- #13: animate transform, not width --------------------------------------
-   A width transition forces layout on every frame for every bar. Scaling a
-   fixed-width element is composited instead, which matters here because there
-   are twelve of these updating sixty times a second. */
-.sense-bar,
-.sbar {
-  transform-origin: left center;
-  transition: transform 90ms cubic-bezier(0.2, 0, 0, 1), left 90ms linear;
-  will-change: transform;
-}
-
-/* --- #9: respect prefers-reduced-motion -------------------------------------
-   This page animates a great deal - swimming fish, travelling signal pulses,
-   breathing neuron halos, drifting plankton. For a reader who has asked their
-   system for less motion, that is not a feature.
-
-   The CSS below stills the interface chrome. The canvas animations are handled
-   in main.js, which reads the same media query and holds the simulation at a
-   fixed frame instead. */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-  }
-}
-
-/* --- text contrast ----------------------------------------------------------
-   Several labels sat at 0.45-0.55 opacity over a dark surface, which lands
-   under the 4.5:1 body-text ratio. Raised to the point where they still read as
-   secondary without dropping below it. */
-#hud > span { opacity: 0.72; }
-.legend { opacity: 0.82; }
-.legend.dim { opacity: 0.66; }
-#focus-note { opacity: 0.8; }
-.hint { opacity: 0.78; }
-
-/* ===========================================================================
-   Shark brain panel - under the tank
-   =========================================================================== */
-#sharkpanel {
+#keys dl {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 470px;
-  gap: 12px;
-  width: 900px;
-  max-width: 100%;
-  box-sizing: border-box;
-  padding: 12px 14px;
-  background: #0a1a26;
-  border: 1px solid #3a1f2b;
-  border-left: 3px solid #f2879a;
-  border-radius: 6px;
+  grid-template-columns: auto 1fr;
+  gap: 6px var(--s3);
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+#keys dt {
+  justify-self: start;
+  padding: 0 6px;
+  color: var(--text-strong);
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+#keys dd { margin: 0; color: var(--text-muted); }
+
+/* ---- first screen: tank + inspector --------------------------------------- */
+/* ONE scroll for the whole page. An earlier version gave the inspector its own
+   scrollbar beside the page's - two scroll regions side by side, which
+   ui-ux-pro-max lists as an anti-pattern (scroll-behavior: avoid nested scroll
+   regions). Now the inspector is as tall as its content and the page scrolls;
+   the tank is sticky, so it stays in view the whole time you read the
+   inspector, and lets go when the lower section arrives. */
+#stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--panel-w);
+  align-items: start;
+  gap: var(--s3);
+  padding: var(--s3) var(--gutter);
 }
 
-#sharkcontrols {
+#tankcol {
+  position: sticky;
+  top: calc(var(--header-h) + var(--s3));
+  display: flex;
+  min-width: 0;
+  height: calc(100dvh - var(--header-h) - 2 * var(--s3));
+  min-height: 420px;
+}
+
+/* Its size comes from the grid, never from the canvas inside it, so the canvas
+   can be fitted to it without a resize feedback loop. */
+#tankwrap {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+#sea {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 18px 48px rgba(0, 0, 0, 0.55);
+  cursor: crosshair;
+}
+
+#panel {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--s3);
   min-width: 0;
 }
 
-#sharkcontrols h2 {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+/* ---- the card component --------------------------------------------------- */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+  min-width: 0;
+}
+
+.card-head h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #f2879a;
+  color: var(--prey);
+  white-space: nowrap;
+}
+/* A small accent tick before every section title. */
+.card-head h2::before {
+  content: '';
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  background: currentColor;
 }
 
-#sharkcontrols button {
-  min-height: 44px;
-  padding: 10px 12px;
-  font: inherit;
-  font-size: 11px;
-  text-align: left;
-  color: #9fc4d6;
-  background: #0f2b3b;
-  border: 1px solid #1d4a63;
-  border-radius: 4px;
+.card-head.divided {
+  margin-top: var(--s1);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--border);
+}
+
+.card-sub {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+#m-title { color: var(--text-strong); }
+
+.card.predator .card-head h2 { color: var(--predator); }
+.card.training .card-head h2 { color: var(--training); }
+
+/* ---- status notes --------------------------------------------------------- */
+#fishstatus { display: flex; flex-direction: column; gap: 6px; }
+#fishstatus:not(:has(.note:not(:empty))) { display: none; }
+
+.note {
+  padding: var(--s2) 10px;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--inset);
+  border-left: 2px solid var(--border-strong);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+.note:empty, .legend:empty { display: none; }
+
+#social-note      { border-left-color: var(--prey); }
+#perception-note  { border-left-color: var(--info); }
+#plan-note        { border-left-color: var(--warn); }
+#shark-status     { border-left-color: var(--predator); }
+#shark-train-note,
+#evolve-note      { border-left-color: var(--training); }
+
+.legend { font-size: var(--fs-xs); line-height: 1.6; color: var(--text-muted); }
+
+.legend-details { font-size: var(--fs-xs); }
+.legend-details > summary {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
   cursor: pointer;
-  transition: background 120ms, border-color 120ms, color 120ms;
+  color: var(--text-muted);
+  transition: color 150ms;
 }
-#sharkcontrols button:hover { background: #14384c; border-color: #2f7d9b; }
-#sharkcontrols button.toggle::before { content: '\25CB  '; opacity: 0.6; }
-#sharkcontrols button.toggle.on::before { content: '\25CF  '; opacity: 1; }
-#sharkcontrols button.toggle.on { color: #ffb4c0; border-color: #9e364c; background: #2a1520; }
-#sharkcontrols button:disabled { opacity: 0.45; cursor: not-allowed; }
+.legend-details > summary::-webkit-details-marker { display: none; }
+.legend-details > summary::before {
+  content: '\25B8';
+  transition: transform 150ms;
+}
+.legend-details[open] > summary::before { transform: rotate(90deg); }
+.legend-details > summary:hover { color: var(--prey); }
+.legend-details > .legend { margin-top: var(--s1); }
 
-.sharkgen { font-size: 10.5px; color: #9fc4d6; opacity: 0.85; margin-bottom: -4px; }
+/* ---- sense rows ------------------------------------------------------------ */
+#senses { display: flex; flex-direction: column; gap: 2px; }
 
-#shark-gen {
-  min-height: 40px;
-  padding: 6px 8px;
+.sense {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 10px;
+  min-height: 22px;
+}
+
+.sense-name { font-size: var(--fs-xs); color: var(--text); white-space: nowrap; }
+
+.sense-track {
+  position: relative;
+  height: 8px;
+  background: var(--inset);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--border);
+  overflow: hidden;
+}
+
+/* Width is set from the live sense value every frame. */
+.sense-bar { height: 100%; width: 0; border-radius: 999px; }
+.is-ray   { background: linear-gradient(90deg, var(--predator-deep), var(--danger)); }
+.is-wall  { background: linear-gradient(90deg, #7a5a20, var(--warn)); }
+.is-speed { background: linear-gradient(90deg, var(--prey-deep), var(--prey)); }
+
+.sense-val {
+  font-size: var(--fs-xs);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+
+/* A sense at zero recedes by colour, not opacity, so it stays legible. */
+.sense.quiet .sense-name,
+.sense.quiet .sense-val { color: var(--text-faint); }
+
+/* ---- canvases inside cards ------------------------------------------------- */
+.canvas-well {
+  line-height: 0;
+  overflow: hidden;
+  background: #081722;          /* the brain view paints this same colour */
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+#brain { cursor: pointer; }
+#brainwrap.idle canvas,
+#sharkbrainwrap.idle canvas { opacity: 0.4; }
+
+/* ---- the arithmetic -------------------------------------------------------- */
+#math { display: flex; flex-direction: column; }
+
+.mrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px 12px 50px 12px 54px;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid rgba(23, 54, 73, 0.5);
+}
+#math .mrow:last-child { border-bottom: none; }
+
+.mlabel { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx     { text-align: right; color: var(--text); }
+.msym   { text-align: center; color: var(--text-faint); }
+.mw     { text-align: right; color: var(--text-muted); }
+.mp     { text-align: right; font-weight: 700; }
+.mp.zero { color: var(--text-faint); font-weight: 400; }
+.mp.pos  { color: var(--prey); }
+.mp.neg  { color: var(--danger); }
+
+.mnote { padding: var(--s1) 0; font-size: var(--fs-xs); color: var(--text-faint); }
+
+.mtotals {
+  padding: var(--s2) 10px;
+  background: var(--inset);
+  border-radius: var(--r-sm);
+}
+.mtotals .mrow { grid-template-columns: 1fr auto; border-bottom: none; min-height: 22px; }
+.mtot { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+.mrow.strong .mtot { font-weight: 700; color: var(--text-strong); font-size: var(--fs-sm); }
+.mrow.out .mlabel, .mrow.out .mtot { color: var(--prey); }
+
+/* ---- mutation log ---------------------------------------------------------- */
+/* No inner scroll here either: main.js already shows only the newest 14. */
+#mutlog {
+  font-size: var(--fs-xs);
+  line-height: 1.7;
+}
+.logrow { display: flex; gap: var(--s2); }
+.loggen { flex: none; width: 34px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.logtext.add { color: var(--prey); }
+.logtext.off { color: var(--danger); }
+
+/* ---- controls -------------------------------------------------------------- */
+button,
+select {
   font: inherit;
-  font-size: 11px;
-  color: #d8ecf5;
-  background: #06222f;
-  border: 1px solid #1d4a63;
-  border-radius: 4px;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
 }
-#shark-gen:disabled { opacity: 0.45; }
 
+button {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 44px;              /* touch target */
+  padding: 0 var(--s3);
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms, border-color 150ms, color 150ms;
+}
+button:hover { background: #14304a; border-color: var(--border-strong); color: var(--text-strong); }
+button:active { transform: translateY(1px); }
+
+/* A toggle says its state with a marker AND colour, never colour alone. */
+button.toggle::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-faint);
+}
+button.toggle.on { color: var(--prey); border-color: rgba(111, 227, 198, 0.45); background: rgba(111, 227, 198, 0.07); }
+button.toggle.on::before { background: var(--prey); border-color: var(--prey); box-shadow: 0 0 8px rgba(111, 227, 198, 0.6); }
+
+.card.predator button.toggle.on { color: var(--predator); border-color: rgba(242, 135, 154, 0.45); background: rgba(242, 135, 154, 0.08); }
+.card.predator button.toggle.on::before { background: var(--predator); border-color: var(--predator); box-shadow: 0 0 8px rgba(242, 135, 154, 0.6); }
+
+.card.training button.toggle.on { color: var(--training); border-color: rgba(167, 156, 242, 0.45); background: rgba(167, 156, 242, 0.08); }
+.card.training button.toggle.on::before { background: var(--training); border-color: var(--training); box-shadow: 0 0 8px rgba(167, 156, 242, 0.6); }
+
+#btn-restart { color: var(--warn); }
+
+select {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 var(--s3);
+  color: var(--text-strong);
+  background: var(--inset);
+  cursor: pointer;
+}
+select:disabled, button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.field-label { font-size: var(--fs-xs); color: var(--text-muted); margin-bottom: -6px; }
+
+#evolvebar { display: flex; flex-direction: column; gap: var(--s2); }
+
+#savebar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));   /* one even row when it fits */
+  gap: var(--s2);
+}
+#savebar button { justify-content: center; text-align: center; }
+
+#savenote { min-height: 18px; font-size: var(--fs-xs); color: var(--prey); }
+
+/* ---- hunger meter ---------------------------------------------------------- */
 .hunger {
   display: grid;
-  grid-template-columns: 48px 1fr auto;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  font-size: 10.5px;
-  color: #9fc4d6;
+  gap: var(--s2);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
 }
-.hunger b { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 74px; text-align: right; }
+.hunger b { min-width: 86px; text-align: right; font-variant-numeric: tabular-nums; }
 .hunger-track {
   height: 10px;
-  background: #06222f;
-  border-radius: 2px;
+  background: var(--inset);
+  border-radius: 999px;
   overflow: hidden;
-  box-shadow: inset 0 0 0 1px rgba(47, 125, 155, 0.35);
+  box-shadow: inset 0 0 0 1px var(--border);
 }
 #hunger-bar {
   height: 100%;
   width: 100%;
-  background: #62d68c;
+  border-radius: 999px;
   transform-origin: left center;
   transform: scaleX(0);
   transition: transform 90ms linear;
 }
 
-#shark-status     { border-left-color: #f2879a; }
-#shark-train-note { border-left-color: #9085e9; }
+/* ---- below the fold: 12-column grid ---------------------------------------- */
+#lower {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--s3);
+  padding: 0 var(--gutter) var(--s5);
+}
 
-#sharkbrainwrap { line-height: 0; min-width: 0; }
-#sharkmeta { line-height: 1.4; font-size: 10.5px; opacity: 0.75; margin-bottom: 6px; }
-#sharkbrain { width: 100%; height: auto; display: block; border-radius: 4px; }
-#sharkbrainwrap.idle #sharkbrain { opacity: 0.35; }
+#sharkpanel {
+  grid-column: span 8;
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.3fr);
+  align-items: start;
+  gap: var(--s4);
+}
+#sharkcontrols { display: flex; flex-direction: column; gap: var(--s2); min-width: 0; }
+#sharkcontrols .card-head { margin-bottom: var(--s1); }
+#sharkbrainwrap { display: flex; flex-direction: column; gap: var(--s2); min-width: 0; }
+#sharkmeta { text-align: left; }
 
-@media (max-width: 960px) {
+#controls { grid-column: span 4; }
+/* Chart first in reading order, mutation log beside it. */
+#lower { grid-auto-flow: row dense; }
+#chartcard { grid-column: 1 / span 8; }
+#mutcard   { grid-column: 9 / span 4; }
+
+/* ---- responsive ------------------------------------------------------------- */
+/* Secondary numbers fold away on medium screens so the header stays one row and
+   the tank keeps its height (ui-ux-pro-max: content-priority). */
+@media (max-width: 1600px) {
+  #hud > span.minor { display: none; }
+}
+
+@media (max-width: 1280px) {
+  #sharkpanel, #controls, #chartcard, #mutcard { grid-column: 1 / -1; }
+}
+
+@media (max-width: 1000px) {
+  /* Wrapped, the bar is too tall to pin: let it scroll away. */
+  #topbar { flex-wrap: wrap; position: static; }
+  .brand { flex: 1 1 100%; }
+  #stage { grid-template-columns: 1fr; }
+  #tankcol { position: static; height: auto; min-height: 0; }
+  #tankwrap { height: min(66vw, calc(100dvh - 24px)); }
+}
+
+@media (max-width: 680px) {
+  :root { --gutter: var(--s2); }
   #sharkpanel { grid-template-columns: 1fr; }
+  #keys .hint { width: min(340px, 90vw); }
 }
 
-/* The fish's brain gets the same treatment as the shark's: an accent card that
-   reads as "this is the live network", in the prey colour instead of the
-   predator's. */
-#brainwrap {
-  border-left: 3px solid #6fe3c6 !important;
-  background: #081722 !important;
+/* ---- reduced motion ----------------------------------------------------------
+   The canvases check the same query in main.js and hold still; this stills the
+   interface chrome. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }
-#brainmeta {
-  color: #6fe3c6;
-  opacity: 0.95 !important;
-  border-left: 3px solid #6fe3c6 !important;
-}
-#brainwrap.idle #brain { opacity: 0.35; }
-
-/* The alive count flashes on every change: red for a loss, green for a birth. */
-@keyframes count-down { from { color: #ff6f86; text-shadow: 0 0 10px rgba(255, 111, 134, 0.8); } }
-@keyframes count-up   { from { color: #6fe39a; text-shadow: 0 0 10px rgba(111, 227, 154, 0.8); } }
-#alive.count-down { animation: count-down 900ms ease-out; }
-#alive.count-up   { animation: count-up 900ms ease-out; }

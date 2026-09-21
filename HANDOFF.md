@@ -123,6 +123,28 @@ champion was chosen largely by luck, exactly as in finding #2.
   largest pack's scout, ringed in the tank. `BrainView.emphasis` (1.6 for fish, 1 for the
   shark) draws its thinner, weaker graph as boldly as the shark's.
 
+### Follow-up: dashboard layout (ui-ux-pro-max "Data-Dense Dashboard")
+
+- **The first screen is the tank.** It is scaled to the largest 3:2 rectangle beside the
+  inspector column (1292×861 on a 1892×950 window, was 900×600). **The simulation is
+  still 900×600 inside.** `fitCanvas(cv, ctx, w, h, displayW, maxPixels)` puts the
+  display scale into the context transform, so no physics number, brain or measurement
+  depends on screen size. The buffer is capped at 4.2 MP for frame rate.
+- Chart and brain diagrams are **widened, not magnified**: their logical width follows
+  the container (`VIEW_SIZE.*.w` is updated), so text stays normal size. Hit-testing
+  already divides by `VIEW_SIZE`.
+- Layout: a sticky one-row header (title, live note, every stat, a "keys" popover),
+  then `#stage` (a sticky tank + the `#panel` inspector; **the page is the only scroller**, no nested scroll regions), then `#lower`, a 12-column
+  grid (shark 8 + controls 4, chart 8 + mutation log 4). Secondary stats (class `minor`) hide
+  below 1600px; everything stacks below 1000px, with no horizontal scroll at any size.
+- **`style.css` was rewritten from scratch** (the layered version turned the inspector
+  into boxes inside boxes). It has one token set in `:root` and one `.card` component
+  (`.card-head` title + `.card-sub` note + body). Muted text uses colours that meet
+  4.5:1, never opacity; buttons are at least 44px; focus is visible; reduced motion is
+  honoured. `.card.predator` / `.card.training` recolour a card's title and toggles. Every element ID is unchanged; a script check confirmed each
+  `getElementById` in main.js exists exactly once.
+- Measured at 1892×950 in ecosystem mode at 20×: 28ms frames, drawing alone 16.9ms.
+
 ## Earlier update: multi-step escape planning (social-v2, 2026-09-21)
 
 Fish now compare a 0.48s initial dodge with alternative exit turns over a 1.92s
