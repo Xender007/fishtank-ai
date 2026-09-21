@@ -1,4 +1,5 @@
-# Owner approval is required for every change, including this file.
+# Request owner review for every change, including this file.
+# The GitHub ruleset grants the owner a pull-request-only bypass.
 * @Xender007
 
 # Keep ownership and repository policy under the owner's review.

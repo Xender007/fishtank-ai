@@ -1,0 +1,34 @@
+# Pull requests into master may only come from this repository's develop branch.
+# Feature work goes to develop; master only receives develop -> master releases.
+#
+# The master ruleset lists this job ("master accepts develop only") as a required
+# status check, so a pull request from any other branch cannot be merged into
+# master. Retarget it to develop instead.
+name: PR source branch
+
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, reopened, synchronize, edited]
+
+permissions: {}
+
+jobs:
+  develop-only:
+    name: master accepts develop only
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the source branch
+        # Branch and repository names come from the pull request, so they are
+        # passed as environment variables, never interpolated into the script.
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          THIS_REPO: ${{ github.repository }}
+        run: |
+          if [ "$HEAD_REF" = "develop" ] && [ "$HEAD_REPO" = "$THIS_REPO" ]; then
+            echo "Source is $THIS_REPO:develop - allowed."
+          else
+            echo "::error::Pull requests into master must come from $THIS_REPO:develop (this one comes from $HEAD_REPO:$HEAD_REF). Change the base branch to develop."
+            exit 1
+          fi
